@@ -224,6 +224,7 @@ textarea{resize:vertical;min-height:52px}
   <div class="screen" id="scr-upcoming">
     <div class="hdr">
       <div class="hdr-title" id="up-title">Upcoming</div>
+      <button onclick="openDaySheet()" style="background:none;border:0.5px solid var(--blue);color:var(--blue);border-radius:20px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;margin-right:6px">📋 Day Sheet</button>
       <button class="btn-primary" onclick="openJobForm(null,null,selUpKey)">+ Add Job</button>
     </div>
     <div class="wk-nav">
@@ -251,6 +252,15 @@ textarea{resize:vertical;min-height:52px}
 
 <!-- MODAL CONTAINER -->
 <div id="modal-root"></div>
+
+<!-- DAY SHEET SCREEN -->
+<div id="day-sheet-overlay" style="display:none;position:fixed;inset:0;background:#fff;z-index:500;overflow-y:auto;padding:24px 20px 40px;max-width:430px;margin:0 auto">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+    <button onclick="closeDaySheet()" style="background:none;border:none;font-size:28px;cursor:pointer;color:var(--text3);padding:0">✕</button>
+    <div style="font-size:13px;color:var(--text3)">Screenshot & send to crew</div>
+  </div>
+  <div id="day-sheet-content"></div>
+</div>
 
 <script>
 // ─── DATA STORE ──────────────────────────────────────────────────
@@ -612,7 +622,7 @@ function goScreen(name){
   document.getElementById('scr-'+name).classList.add('active');
   document.getElementById('nav-'+name).classList.add('active');
   curScreen=name;
-  if(name==='schedule')renderSchedule();
+  if(name==='schedule'){viewKey=TODAY;renderSchedule();}
   if(name==='history')renderHistory();
   if(name==='upcoming')renderUpcoming();
 }
@@ -734,6 +744,7 @@ function doMoveJob(jid,fromKey,toKey2){
   const jobs=gS(fromKey);const idx=jobs.findIndex(j=>j.id===jid);
   if(idx>-1){const[j]=jobs.splice(idx,1);gS(toKey2).push({...j,done:false,skipped:false});save();}
   closeSheet();
+  viewKey=TODAY;
   renderSchedule();
   renderUpcoming();
   showToast('Job moved to '+fmtDate(toKey2));
@@ -912,8 +923,11 @@ function renderProfileMgr(){
   PROFILES.forEach((p,i)=>{
     rows+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid var(--border)">
       <div style="flex:1"><div style="font-size:14px;font-weight:600">${p.name}</div>
-      <div style="font-size:12px;color:var(--text3)">${p.service} · $${p.price}</div></div>
-      <button onclick="deleteProfile(${i})" style="background:none;border:0.5px solid var(--red);color:var(--red);border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer;flex-shrink:0;margin-left:8px">Remove</button>
+      <div style="font-size:12px;color:var(--text3)">${p.service} · $${p.price} · ${p.loc}</div></div>
+      <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px">
+        <button onclick="editProfile(${i})" style="background:none;border:0.5px solid var(--blue);color:var(--blue);border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer">Edit</button>
+        <button onclick="deleteProfile(${i})" style="background:none;border:0.5px solid var(--red);color:var(--red);border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer">Remove</button>
+      </div>
     </div>`;
   });
   if(!rows)rows='<div style="text-align:center;padding:20px;color:var(--text3)">No profiles yet.</div>';
@@ -944,6 +958,39 @@ function deleteProfile(i){
   if(!confirm('Remove profile "'+PROFILES[i].name+'"?'))return;
   PROFILES.splice(i,1);
   save();
+  renderProfileMgr();
+}
+
+function editProfile(i){
+  const p = PROFILES[i];
+  let svcOpts = SVCS.map(s=>`<option value="${s}"${p.service===s?' selected':''}>${s}</option>`).join('');
+  showSheet(`
+    <div class="sheet-title">Edit Profile</div>
+    <div class="fl" style="margin-top:0">Profile name</div>
+    <input type="text" id="ep-name" value="${p.name}" placeholder="e.g. Bryan – Lawncare"/>
+    <div class="fl">Location / address</div>
+    <input type="text" id="ep-loc" value="${p.loc}" placeholder="e.g. 123 Main St"/>
+    <div class="fl">Service</div>
+    <select id="ep-svc">${svcOpts}</select>
+    <div class="fl">Price</div>
+    <div class="dollar-row"><span>$</span><input type="number" id="ep-price" value="${p.price}" placeholder="0.00" step="0.01" min="0"/></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" onclick="saveEditProfile(${i})">Save Changes</button>
+    </div>
+  `);
+}
+
+function saveEditProfile(i){
+  const name  = (document.getElementById('ep-name').value||'').trim();
+  const loc   = (document.getElementById('ep-loc').value||'').trim();
+  const svc   = document.getElementById('ep-svc').value;
+  const price = parseFloat(document.getElementById('ep-price').value)||0;
+  if(!name){ alert('Profile name is required'); return; }
+  if(!loc){  alert('Location is required'); return; }
+  PROFILES[i] = { name, loc, service: svc, price };
+  save();
+  closeSheet();
   renderProfileMgr();
 }
 
@@ -1055,21 +1102,23 @@ function saveJobForm(editId,editKey,defKey){
   } else {
     gS(dateVal).push({id:uid(),loc,service:svc,note,price,done:false,skipped:false,jE,profileName:window._selectedProfileName||''});window._selectedProfileName='';
   }
-  viewKey=dateVal;
+  // Only update viewKey if we're on the schedule screen
+  if(curScreen === 'schedule') viewKey = dateVal;
   save();
   closeSheet();
-  renderSchedule();
-  renderUpcoming(); // keep upcoming in sync too
+  if(curScreen === 'schedule') renderSchedule();
+  else if(curScreen === 'upcoming') renderUpcoming();
+  else { renderSchedule(); renderUpcoming(); }
 }
 
 function deleteJob(id,k){
   if(!confirm('Delete this job?'))return;
   SC[k]=gS(k).filter(j=>j.id!==id);
-  viewKey=k;
+  if(curScreen==='schedule') viewKey=k;
   save();
   closeSheet();
-  renderSchedule();
-  renderUpcoming();
+  if(curScreen==='upcoming') renderUpcoming();
+  else renderSchedule();
 }
 
 // ─── ADD JOB EXPENSE (quick) ─────────────────────────────────────
@@ -1905,6 +1954,56 @@ function doExport(url, inclAll, inclExp){
     iframe.remove();
     showToast('✓ Exported to Google Sheets!');
   }, 3000);
+}
+
+// ─── DAY SHEET ───────────────────────────────────────────────────
+function openDaySheet(){
+  const jobs = gS(selUpKey).filter(j=>!j.skipped);
+  const dateStr = fmtDate(selUpKey);
+  const SVC_EMOJI = {Lawncare:'🌿',Treework:'🌳',Mulching:'🍂',Landscaping:'🏡',Maintenance:'🔧'};
+
+  if(!jobs.length){
+    alert('No jobs scheduled for '+dateStr);
+    return;
+  }
+
+  let html = `
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:28px;font-weight:800;color:#1A1A18;letter-spacing:-0.5px">${dateStr}</div>
+      <div style="font-size:14px;color:#9E9B97;margin-top:4px">${jobs.length} job${jobs.length>1?'s':''} scheduled</div>
+    </div>`;
+
+  jobs.forEach((j,idx)=>{
+    const pn = profileNameFor(j);
+    const emoji = SVC_EMOJI[j.service] || '📍';
+    html += `
+    <div style="border:1.5px solid #E0DDD8;border-radius:14px;padding:16px;margin-bottom:12px">
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <div style="font-size:28px;flex-shrink:0;line-height:1">${emoji}</div>
+        <div style="flex:1">
+          <div style="font-size:18px;font-weight:700;color:#1A1A18;line-height:1.2">${pn.name}</div>
+          ${pn.addr?`<div style="font-size:14px;color:#6B6966;margin-top:3px">📍 ${pn.addr}</div>`:`<div style="font-size:14px;color:#6B6966;margin-top:3px">📍 ${j.loc}</div>`}
+          <div style="display:inline-block;margin-top:8px;background:#F1EFE8;border-radius:8px;padding:4px 10px;font-size:13px;font-weight:600;color:#6B6966">${j.service}</div>
+          ${j.note?`<div style="font-size:13px;color:#9E9B97;margin-top:8px;font-style:italic;border-top:0.5px solid #E0DDD8;padding-top:8px">📝 ${j.note}</div>`:''}
+        </div>
+        <div style="font-size:20px;font-weight:800;color:#185FA5;flex-shrink:0">${idx+1}</div>
+      </div>
+    </div>`;
+  });
+
+  html += `
+    <div style="text-align:center;margin-top:24px;padding-top:16px;border-top:0.5px solid #E0DDD8">
+      <div style="font-size:12px;color:#9E9B97">LawnApp · ${dateStr}</div>
+    </div>`;
+
+  document.getElementById('day-sheet-content').innerHTML = html;
+  document.getElementById('day-sheet-overlay').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDaySheet(){
+  document.getElementById('day-sheet-overlay').style.display = 'none';
+  document.body.style.overflow = '';
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
