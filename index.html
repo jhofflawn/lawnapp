@@ -37,7 +37,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:-apple-sy
 .btn-danger{background:none;border:0.5px solid var(--red);color:var(--red);border-radius:10px;padding:11px;font-size:15px;cursor:pointer;width:100%;text-align:center;margin-top:8px}
 
 /* BOTTOM NAV */
-.bnav{display:flex;border-top:0.5px solid var(--border);background:var(--card);padding-bottom:var(--safe-bot);flex-shrink:0}
+.bnav{display:flex;border-top:0.5px solid var(--border);background:var(--card);padding-bottom:var(--safe-bot);flex-shrink:0;position:relative;z-index:10}
 .bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px;border:none;background:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--text3)}
 .bnav-btn.active{color:var(--blue)}
 .bnav-icon{font-size:22px;line-height:1}
@@ -137,12 +137,15 @@ textarea{resize:vertical;min-height:52px}
 .wk-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:10px 12px;border-bottom:0.5px solid var(--border);flex-shrink:0;background:var(--card)}
 .dp{display:flex;flex-direction:column;align-items:center;padding:6px 2px;border-radius:10px;cursor:pointer;border:0.5px solid transparent}
 .dp.hj{background:var(--info-bg)}
+.dp.pj{background:#FFF3E0}
+.dp.hj.pj{background:linear-gradient(90deg,var(--info-bg) 50%,#FFF3E0 50%)}
+.dp.pj .dp-n,.dp.pj .dp-d,.dp.pj .dp-c{color:#E65100}
 .dp.sel{background:transparent;box-shadow:0 0 0 2px var(--blue);}
 .dp-n{font-size:9px;color:var(--text3);font-weight:600;text-transform:uppercase}
 .dp-d{font-size:15px;font-weight:600;color:var(--text);margin-top:1px}
 .dp-c{font-size:10px;color:var(--text3);margin-top:2px;font-weight:600;min-height:13px}
 .dp.hj .dp-n,.dp.hj .dp-d,.dp.hj .dp-c{color:var(--blue)}
-.dp.sel .dp-n,.dp.sel .dp-d,.dp.sel .dp-c{color:var(--blue)}
+.dp.sel .dp-n,.dp.sel .dp-d,.dp.sel .dp-c{color:var(--blue)!important}
 
 /* HISTORY */
 .mnav{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:0.5px solid var(--border);flex-shrink:0;background:var(--card)}
@@ -238,6 +241,19 @@ textarea{resize:vertical;min-height:52px}
   </div>
 
   <!-- BOTTOM NAV -->
+<!-- PROJECTS SCREEN -->
+  <div class="screen" id="scr-projects">
+    <div class="hdr">
+      <div class="hdr-title">Projects</div>
+      <button class="btn-primary" onclick="openProjectForm()">+ New Project</button>
+    </div>
+    <div style="display:flex;border-bottom:0.5px solid var(--border);flex-shrink:0;background:var(--card)">
+      <button id="proj-tab-active" onclick="setProjTab('active')" style="flex:1;padding:10px;border:none;background:none;font-size:13px;font-weight:600;color:var(--blue);border-bottom:2px solid var(--blue);cursor:pointer">Active</button>
+      <button id="proj-tab-completed" onclick="setProjTab('completed')" style="flex:1;padding:10px;border:none;background:none;font-size:13px;font-weight:600;color:var(--text3);border-bottom:2px solid transparent;cursor:pointer">Completed</button>
+    </div>
+    <div class="screen-body" id="proj-body"></div>
+  </div>
+
   <div class="bnav">
     <button class="bnav-btn" id="nav-history" onclick="goScreen('history')">
       <div class="bnav-icon">📁</div><span>History</span>
@@ -248,8 +264,13 @@ textarea{resize:vertical;min-height:52px}
     <button class="bnav-btn" id="nav-upcoming" onclick="goScreen('upcoming')">
       <div class="bnav-icon">📅</div><span>Upcoming</span>
     </button>
+    <button class="bnav-btn" id="nav-projects" onclick="goScreen('projects')">
+      <div class="bnav-icon">🏗️</div><span>Projects</span>
+    </button>
   </div>
 </div>
+
+
 
 <!-- MODAL CONTAINER -->
 <div id="modal-root"></div>
@@ -272,7 +293,7 @@ const uid = () => String(nid++);
 let ECATS = ['Gas','Supplies','Equipment','Dump Fee','Other'];
 const ECAT_COLOR = {Gas:'#185FA5',Supplies:'#0F6E56',Equipment:'#854F0B','Dump Fee':'#A32D2D',Other:'#534AB7'};
 const SVC_COLOR = {Lawncare:'#3B6D11',Treework:'#854F0B',Mulching:'#5F5E5A',Landscaping:'#185FA5',Maintenance:'#BA7517'};
-const SVCS = ['Lawncare','Treework','Mulching','Landscaping','Maintenance'];
+let SVCS = ['Lawncare','Treework','Mulching','Landscaping','Maintenance'];
 const MAINT_ITEMS = ['Oil change','Mower blades','Air filter','Belt replacement','Battery replacement','Fuel filter','Grease fittings','Hydraulic fluid','Other'];
 let MACHINES = [];
 let PROFILES = [
@@ -294,7 +315,7 @@ let _saveTimer  = null;
 let _syncStatus = 'idle'; // idle | saving | error
 
 function getSnapshot(){
-  return { SC, DE, HW, PAID, MAINT, laborRate, ECATS, MACHINES, PROFILES, nid };
+  return { SC, DE, HW, PAID, MAINT, laborRate, ECATS, MACHINES, PROFILES, SVCS, PROJECTS, nid };
 }
 
 function applySnapshot(d){
@@ -598,6 +619,7 @@ function monthKeys(off){
 function monthStats(off){
   let rev=0,exp=0,hrs=0,col=0,out=0;
   monthKeys(off).forEach(k=>{
+    if(k>TODAY) return; // exclude future days from tiles
     rev+=tRev(k);exp+=tExp(k);hrs+=gHrs(k);
     gS(k).filter(j=>!j.skipped).forEach(j=>{isPaid(j.id)?col+=(+j.price||0):out+=(+j.price||0);});
   });
@@ -618,14 +640,16 @@ function profileNameFor(j){
 // ─── NAV ─────────────────────────────────────────────────────────
 let curScreen='schedule';
 function goScreen(name){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.querySelectorAll('.bnav-btn').forEach(b=>b.classList.remove('active'));
+  // Add active to new screen FIRST to prevent layout collapse/jump
   document.getElementById('scr-'+name).classList.add('active');
   document.getElementById('nav-'+name).classList.add('active');
+  document.querySelectorAll('.screen').forEach(s=>{if(s.id!=='scr-'+name)s.classList.remove('active');});
+  document.querySelectorAll('.bnav-btn').forEach(b=>{if(b.id!=='nav-'+name)b.classList.remove('active');});
   curScreen=name;
   if(name==='schedule'){viewKey=TODAY;renderSchedule();}
   if(name==='history')renderHistory();
   if(name==='upcoming')renderUpcoming();
+  if(name==='projects')renderProjects();
 }
 
 // ─── SCHEDULE ─────────────────────────────────────────────────────
@@ -650,7 +674,8 @@ function renderSchedule(){
     </div>`;});
     html+='<hr class="divider">';
   }
-  if(!active.length&&!done.length&&!skipped.length)html+='<div class="empty">No jobs scheduled.<br>Tap <b>+ Add Job</b> to add one.</div>';
+  html+=renderProjectBanner(viewKey);
+  if(!active.length&&!done.length&&!skipped.length&&!getProjectsForDay(viewKey).length)html+='<div class="empty">No jobs scheduled.<br>Tap <b>+ Add Job</b> to add one.</div>';
   if(active.length){html+='<div class="slbl">Scheduled</div>';active.forEach(j=>html+=jCardHTML(j,false,false));}
   if(done.length){html+='<hr class="divider"><div class="slbl">Completed</div>';done.forEach(j=>html+=jCardHTML(j,true,false));}
   if(skipped.length){html+='<hr class="divider"><div class="slbl">Skipped</div>';skipped.forEach(j=>html+=jCardHTML(j,false,false,true));}
@@ -804,7 +829,10 @@ function openJobForm(editId,editKey,defKey){
     <div class="fl">Location</div>
     <input type="text" id="jf-loc" placeholder="e.g. 123 Main St" value="${ex?ex.loc:''}"/>
     <div class="fl">Service</div>
-    <div class="chips" id="svc-chips">${svcChips}</div>
+    <div style="display:flex;align-items:flex-start;gap:6px">
+      <div class="chips" id="svc-chips" style="flex:1">${svcChips}</div>
+      <button onclick="openAddServiceSheet()" style="flex-shrink:0;width:30px;height:30px;border-radius:50%;background:var(--blue);color:#fff;border:none;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;margin-top:2px">+</button>
+    </div>
     <div class="fl">Price</div>
     <div class="dollar-row"><span>$</span><input type="number" id="jf-price" placeholder="0.00" step="0.01" min="0" value="${ex&&ex.price?ex.price:''}"/></div>
     <div class="fl">Note (optional)</div>
@@ -837,6 +865,52 @@ function renderJeList(items){
 }
 
 function addJeRow(){window._jeItems.push({id:uid(),cat:ECATS[0],desc:'',amount:''});renderJeList(window._jeItems);}
+
+function openAddServiceSheet(){
+  const rows = SVCS.map((s,i) => {
+    const isDefault = ['Lawncare','Treework','Mulching','Landscaping','Maintenance'].includes(s);
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid var(--border)">
+      <span style="font-size:14px;font-weight:600">${s}</span>
+      ${!isDefault ? `<button onclick="removeSvc(${i})" style="background:none;border:0.5px solid var(--red);color:var(--red);border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer">Remove</button>` : '<span style="font-size:11px;color:var(--text3)">default</span>'}
+    </div>`;
+  }).join('');
+
+  showSheet(`
+    <div class="sheet-title">Service Categories</div>
+    <div style="max-height:35vh;overflow-y:auto;margin-bottom:14px">${rows}</div>
+    <div style="border-top:0.5px solid var(--border);padding-top:14px">
+      <div class="fl" style="margin-top:0">Add new service</div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <input type="text" id="new-svc-inp" placeholder="e.g. Snow Removal" style="flex:1"/>
+        <button class="btn-save" style="flex:none;padding:10px 14px" onclick="addNewSvc()">Add</button>
+      </div>
+    </div>
+    <button class="btn-outline" style="margin-top:12px" onclick="closeSheet()">Done</button>
+  `);
+}
+
+function addNewSvc(){
+  const val = (document.getElementById('new-svc-inp').value||'').trim();
+  if(!val){ alert('Enter a service name'); return; }
+  if(SVCS.includes(val)){ alert('That service already exists'); return; }
+  SVCS.push(val);
+  save();
+  closeSheet();
+  showToast('Service "'+val+'" added');
+  // Refresh the svc chips in the job form
+  const chips = document.getElementById('svc-chips');
+  if(chips){
+    chips.innerHTML = SVCS.map(s=>`<button class="chip" onclick="pickSvc(this,'${s}')">${s}</button>`).join('');
+  }
+}
+
+function removeSvc(idx){
+  if(!confirm('Remove service "'+SVCS[idx]+'"?'))return;
+  SVCS.splice(idx,1);
+  save();
+  closeSheet();
+  openAddServiceSheet();
+}
 
 function pickSvc(btn,svc){document.querySelectorAll('#svc-chips .chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');}
 function applyProfileSelect(){
@@ -1350,13 +1424,31 @@ function deleteMaint(id){
 }
 
 // ─── HISTORY ──────────────────────────────────────────────────────
-let histMO=0, profTog=false;
+let histMO=0, profTog=false, histView='jobs'; // 'jobs' or 'projects'
 
 function renderHistory(){
   document.getElementById('hist-month-lbl').textContent=monthLabel(histMO);
+
+  const toggleBar=`<div style="display:flex;background:#F1EFE8;border-radius:10px;padding:3px;margin:10px 16px 0;flex-shrink:0">
+    <button onclick="histView='jobs';renderHistory()" style="flex:1;padding:7px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:${histView==='jobs'?'var(--card)':'transparent'};color:${histView==='jobs'?'var(--blue)':'var(--text3)'}">📋 Jobs</button>
+    <button onclick="histView='projects';renderHistory()" style="flex:1;padding:7px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:${histView==='projects'?'var(--card)':'transparent'};color:${histView==='projects'?'#E65100':'var(--text3)'}">🏗️ Projects</button>
+  </div>`;
+
+  if(histView==='projects'){
+    const ps=projectMonthStats(histMO);
+    document.getElementById('tiles-wrap').innerHTML=toggleBar+`
+      <div class="tiles">
+        <div class="tile click" onclick="openProjRevTile()"><div class="tile-l">Revenue ›</div><div class="tile-v g">$${ps.rev.toFixed(0)}</div><div class="tile-s">${ps.count} project${ps.count!==1?'s':''}</div></div>
+        <div class="tile click" onclick="openProjExpTile()"><div class="tile-l">Expenses ›</div><div class="tile-v r">$${ps.exp.toFixed(0)}</div><div class="tile-s">tap for breakdown</div></div>
+        <div class="tile"><div class="tile-l">Hours</div><div class="tile-v b">${ps.hrs.toFixed(1)}<span style="font-size:13px;font-weight:400;color:var(--text3)"> hrs</span></div></div>
+        <div class="tile"><div class="tile-l">Profit</div><div class="tile-v ${ps.profit>=0?'g':'r'}">$${ps.profit.toFixed(0)}</div><div class="tile-s">quoted − expenses</div></div>
+      </div>`;
+    renderHistList(document.getElementById('hist-search').value||'');
+    return;
+  }
+
   const s=monthStats(histMO);
   const totalJobs=monthKeys(histMO).reduce((t,k)=>t+SC[k].length,0);
-
   const profTile=profTog?`
     <div class="tile toggled click" onclick="profTog=!profTog;renderHistory()">
       <div class="tile-l" style="margin-bottom:6px">tap to toggle ↩</div>
@@ -1371,14 +1463,13 @@ function renderHistory(){
       <div class="tile-s">tap to see collected</div>
     </div>`;
 
-  document.getElementById('tiles-wrap').innerHTML=`
+  document.getElementById('tiles-wrap').innerHTML=toggleBar+`
     <div class="tiles">
       <div class="tile click" onclick="openHrsTile()"><div class="tile-l">Hours worked ›</div><div class="tile-v b">${s.hrs.toFixed(1)}<span style="font-size:13px;font-weight:400;color:var(--text3)"> hrs</span></div><div class="tile-s">@ $${laborRate}/hr · ${s.days} days</div></div>
       <div class="tile click" onclick="openRevTile()"><div class="tile-l">Revenue ›</div><div class="tile-v g">$${s.rev.toFixed(0)}</div><div class="tile-s">${totalJobs} jobs</div></div>
       <div class="tile click" onclick="openExpTile()"><div class="tile-l">Expenses ›</div><div class="tile-v r">$${s.exp.toFixed(0)}</div><div class="tile-s">tap for breakdown</div></div>
       ${profTile}
-    </div>
-`;
+    </div>`;
 
   renderHistList(document.getElementById('hist-search').value||'');
 }
@@ -1397,10 +1488,98 @@ function renderHistList(filter){
     const rev=tRev(k),exp=tExp(k),hrs=gHrs(k),net=rev-exp;
     const paid=gS(k).filter(j=>isPaid(j.id)&&!j.skipped).reduce((s,j)=>s+(+j.price||0),0);
     const out=rev-paid;
-    rows.push('<div class="hist-row" onclick="openHistDay(\'' + k + '\')"><div><div class="hist-date">' + fmtDate(k) + '</div><div class="hist-meta">' + gS(k).length + ' job' + (gS(k).length>1?'s':'') + (hrs?' · '+hrs+' hrs':' · no hours') + '</div>' + (out>0?'<div class="hist-outstanding">$'+out.toFixed(0)+' outstanding</div>':'') + '</div><div style="text-align:right"><div class="hist-rev">$'+rev.toFixed(2)+'</div>'+(exp?'<div style="font-size:11px;color:var(--red)">-$'+exp.toFixed(2)+' exp</div>':'')+'<div style="font-size:11px;color:var(--text3)">net $'+net.toFixed(0)+'</div></div></div>');
+    rows.push('<div class="hist-row" onclick="openHistDay(\'' + k + '\')"><div><div class="hist-date">' + fmtDate(k) + '</div><div class="hist-meta">' + gS(k).length + ' job' + (gS(k).length>1?'s':'') + (hrs?' · '+hrs+' hrs':' · no hours') + '</div>' + (out>0?(k>TODAY?'<div style="font-size:11px;color:#5BA4CF;margin-top:1px">$'+out.toFixed(0)+' future</div>':'<div class="hist-outstanding">$'+out.toFixed(0)+' outstanding</div>'):'') + '</div><div style="text-align:right"><div class="hist-rev">$'+rev.toFixed(2)+'</div>'+(exp?'<div style="font-size:11px;color:var(--red)">-$'+exp.toFixed(2)+' exp</div>':'')+'<div style="font-size:11px;color:var(--text3)">net $'+net.toFixed(0)+'</div></div></div>');
   });
   if(showTodayLine&&!passedToday){rows.push(todayDivider);}
+
+  // Append completed projects for this month
+  const projRows = getCompletedProjectsForMonth(histMO);
+  if(projRows) rows.push(projRows);
   document.getElementById('hist-body').innerHTML=rows.join('');
+}
+
+function projectMonthStats(off){
+  const d=new Date();d.setMonth(d.getMonth()+off);
+  const y=d.getFullYear(),m=d.getMonth();
+  const mStart=y+'-'+String(m+1).padStart(2,'0')+'-01';
+  const mEnd=y+'-'+String(m+1).padStart(2,'0')+'-'+String(new Date(y,m+1,0).getDate()).padStart(2,'0');
+  // Include projects active or completed during this month
+  const list=PROJECTS.filter(p=>{
+    const s=p.startDate||'';const e=p.endDate||'9999-12-31';
+    return s<=mEnd&&e>=mStart;
+  });
+  let rev=0,exp=0,hrs=0;
+  list.forEach(p=>{
+    rev+=(p.status==='completed'?(p.actualBilled||p.quotedPrice||0):(+p.quotedPrice||0));
+    exp+=(p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
+    hrs+=(p.workDays||[]).reduce((s,d)=>s+(+d.hours||0),0);
+  });
+  return{rev,exp,hrs,profit:rev-exp,count:list.length,list};
+}
+
+function openProjRevTile(){
+  const ps=projectMonthStats(histMO);
+  const rows=ps.list.map(p=>`<div class="bdr-row" onclick="openProjectDetail('${p.id}');closeSheet()">
+    <div><div style="font-size:14px">${p.name}</div><div style="font-size:11px;color:var(--text3)">${p.category||''}${p.status==='completed'?' · ✓ Done':' · Active'}</div></div>
+    <div style="font-weight:600;color:var(--green)">$${(p.quotedPrice||0).toFixed(0)}</div>
+  </div>`).join('');
+  showSheet(`
+    <div class="sheet-title">Project Revenue</div>
+    <div class="info-box" style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text2)">Total quoted</span><span style="font-size:20px;font-weight:700;color:var(--green)">$${ps.rev.toFixed(0)}</span></div>
+    ${rows||'<div style="text-align:center;padding:20px;color:var(--text3)">No projects this month.</div>'}
+    <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Close</button>
+  `);
+}
+
+function openProjExpTile(){
+  const ps=projectMonthStats(histMO);
+  const cats={};
+  ps.list.forEach(p=>{
+    (p.expenses||[]).forEach(e=>{
+      if(!cats[e.cat])cats[e.cat]=[];
+      cats[e.cat].push({desc:(e.desc||e.cat)+' ('+p.name+')',amount:+e.amount,date:e.date?fmtDate(e.date):''});
+    });
+  });
+  let rows='';
+  Object.keys(cats).forEach(cat=>{
+    const items=cats[cat],tot=items.reduce((s,i)=>s+i.amount,0);
+    rows+=`<div class="cat-hdr"><span style="color:${ECAT_COLOR[cat]||'#888'}">${cat}</span><span style="color:var(--red)">$${tot.toFixed(2)}</span></div>`;
+    items.forEach(i=>{rows+=`<div class="bdr-row"><div><div style="font-size:14px">${i.desc}</div><div style="font-size:11px;color:var(--text3)">${i.date}</div></div><div style="font-weight:600;color:var(--red)">$${i.amount.toFixed(2)}</div></div>`;});
+  });
+  showSheet(`
+    <div class="sheet-title">Project Expenses</div>
+    <div class="info-box" style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text2)">Total</span><span style="font-size:20px;font-weight:700;color:var(--red)">$${ps.exp.toFixed(0)}</span></div>
+    ${rows||'<div style="text-align:center;padding:20px;color:var(--text3)">No project expenses this month.</div>'}
+    <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Close</button>
+  `);
+}
+
+function getCompletedProjectsForMonth(off){
+  const d=new Date(); d.setMonth(d.getMonth()+off);
+  const y=d.getFullYear(), m=d.getMonth();
+  const mStart=y+'-'+String(m+1).padStart(2,'0')+'-01';
+  const mEnd=y+'-'+String(m+1).padStart(2,'0')+'-'+String(new Date(y,m+1,0).getDate()).padStart(2,'0');
+  const list=PROJECTS.filter(p=>p.status==='completed'&&p.endDate&&p.endDate>=mStart&&p.endDate<=mEnd);
+  if(!list.length) return '';
+  let html='<div class="slbl" style="margin-top:16px;margin-bottom:8px">COMPLETED PROJECTS</div>';
+  list.forEach(p=>{
+    const exp=(p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
+    const billed=(p.actualBilled||p.quotedPrice||0);
+    const profit=billed-exp;
+    const profitColor=profit>=0?'var(--green)':'var(--red)';
+    html+=`<div onclick="openProjectDetail('${p.id}')" style="background:var(--card);border:0.5px solid var(--border);border-left:3px solid var(--green);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:14px;font-weight:700;color:var(--text)">🏗️ ${p.name}</div>
+        <div style="font-size:12px;color:var(--text3)">${p.category||''}${p.endDate?' · '+fmtDate(p.endDate):''}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:13px;font-weight:600;color:var(--green)">$${(p.actualBilled||p.quotedPrice||0).toFixed(0)} billed</div>
+        ${exp?`<div style="font-size:11px;color:var(--red)">-$${exp.toFixed(0)} exp</div>`:''}
+        <div style="font-size:11px;color:${profitColor}">$${profit.toFixed(0)} profit</div>
+      </div>
+    </div>`;
+  });
+  return html;
 }
 function onHistSearch(){
   const val=document.getElementById('hist-search').value.trim().toLowerCase();
@@ -1680,7 +1859,8 @@ function renderUpcoming(){
     const d=addDays(wsDate,i),k=toKey(d);
     const has=SC[k]&&SC[k].length>0,isSel=k===selUpKey;
     const isToday=(k===TODAY);
-    return`<div class="dp${has?' hj':''}${isSel?' sel':''}" onclick="selUpKey='${k}';renderUpcoming()">
+    const hasProj=getProjectsForDay(k).length>0;
+    return`<div class="dp${has?' hj':''}${hasProj?' pj':''}${isSel?' sel':''}" onclick="selUpKey='${k}';renderUpcoming()">
       <div style="font-size:9px;text-align:center;color:var(--red);line-height:1;margin-bottom:1px">${isToday?'▼':''}</div>
       <div class="dp-n">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]}</div>
       <div class="dp-d">${d.getDate()}</div>
@@ -1691,7 +1871,8 @@ function renderUpcoming(){
 
   const jobs=gS(selUpKey);
   const sc=SVC_COLOR;
-  document.getElementById('up-body').innerHTML=jobs.length?jobs.map(j=>{
+  const projBanner=renderProjectBanner(selUpKey);
+  const upJobCards=jobs.map(j=>{
     const upPn=profileNameFor(j);
     return`<div class="jcard ${j.service.toLowerCase().replace(' ','')}" draggable="true" data-id="${j.id}" data-key="${selUpKey}">
       <div class="jrow">
@@ -1703,7 +1884,9 @@ function renderUpcoming(){
         </div>
         <button class="icon-btn" onclick="openJobForm('${j.id}','${selUpKey}')">✏️</button>
       </div>
-    </div>`;}).join(''):'<div class="empty">No jobs yet.<br>Tap <b>+ Add Job</b> to schedule one.</div>';
+    </div>`;
+  }).join('');
+  document.getElementById('up-body').innerHTML = projBanner + (upJobCards || (!projBanner ? '<div class="empty">No jobs yet.<br>Tap <b>+ Add Job</b> to schedule one.</div>' : ''));
   initDrag(document.getElementById('up-body'));
 }
 
@@ -1858,7 +2041,7 @@ function openExportSheet(){
     </div>
     <label style="display:flex;align-items:center;gap:10px;font-size:14px;margin-bottom:10px;cursor:pointer">
       <input type="checkbox" id="exp-all" style="width:18px;height:18px"/>
-      Include scheduled (not just completed)
+      Include all jobs (completed + scheduled + skipped)
     </label>
     <label style="display:flex;align-items:center;gap:10px;font-size:14px;margin-bottom:18px;cursor:pointer">
       <input type="checkbox" id="exp-expenses" checked style="width:18px;height:18px"/>
@@ -1929,13 +2112,13 @@ function doExport(url, inclAll, inclExp){
     const hrs = HW[k] || '';
     const dayExp = (DE[k]||[]).reduce((s,e)=>s+(+e.amount||0),0);
     jobs.forEach(j=>{
-      if(!inclAll && !j.done) return;
+      if(!inclAll && !j.done && !j.skipped) return; // always include skipped too
       const pn = profileNameFor(j);
       const jExp = (j.jE||[]).reduce((s,e)=>s+(+e.amount||0),0);
       rows.push([
         k,
         pn.name,
-        pn.addr || j.loc,
+        pn.addr || '',  // blank address for jobs without a profile
         j.service,
         j.price || 0,
         j.done ? 'Completed' : j.skipped ? 'Skipped' : 'Scheduled',
@@ -2108,85 +2291,481 @@ function openWeekSheet(){
 }
 
 // ─── YEARLY STATS ────────────────────────────────────────────────
-function openYearSheet(){
+function openYearSheet(yearView){
+  yearView = yearView || 'jobs';
   const year = new Date().getFullYear();
-
-  // Calculate stats for each month of the current year
-  let totalRev=0, totalExp=0, totalHrs=0, totalJobs=0;
-  const monthData = [];
-
-  for(let m=0; m<12; m++){
-    const off = m - new Date().getMonth(); // offset from current month
-    const keys = (() => {
-      const d = new Date(year, m, 1);
-      const s = year+'-'+String(m+1).padStart(2,'0')+'-01';
-      const e = year+'-'+String(m+1).padStart(2,'0')+'-'+String(new Date(year,m+1,0).getDate()).padStart(2,'0');
-      return Object.keys(SC).filter(k=>k>=s&&k<=e&&SC[k].length>0);
-    })();
-
-    let mRev=0, mExp=0, mHrs=0, mJobs=0;
-    keys.forEach(k=>{
-      mRev += tRev(k);
-      mExp += tExp(k);
-      mHrs += gHrs(k);
-      mJobs += gS(k).length;
-    });
-    const mProfit = mRev - mExp - (mHrs * laborRate);
-
-    totalRev += mRev;
-    totalExp += mExp;
-    totalHrs += mHrs;
-    totalJobs += mJobs;
-
-    if(mJobs > 0 || keys.length > 0){
-      monthData.push({month: m, rev: mRev, exp: mExp, hrs: mHrs, jobs: mJobs, profit: mProfit});
-    }
-  }
-
-  const totalProfit = totalRev - totalExp - (totalHrs * laborRate);
   const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  let rows = '';
-  monthData.forEach(md => {
-    rows += `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--border)">
-      <div>
-        <div style="font-size:15px;font-weight:600;color:var(--text)">${MN[md.month]} ${year}</div>
-        <div style="font-size:12px;color:var(--text3)">${md.jobs} job${md.jobs!==1?'s':''} · ${md.hrs.toFixed(1)} hrs</div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:14px;font-weight:600;color:var(--green)">$${md.rev.toFixed(0)}</div>
-        <div style="font-size:11px;color:var(--red)">-$${md.exp.toFixed(0)} exp</div>
-        <div style="font-size:11px;color:${md.profit>=0?'var(--green)':'var(--red)'}">$${md.profit.toFixed(0)} profit</div>
-      </div>
-    </div>`;
-  });
+  const toggleBar = `<div style="display:flex;background:#F1EFE8;border-radius:10px;padding:3px;margin-bottom:16px">
+    <button onclick="closeSheet();openYearSheet('jobs')" style="flex:1;padding:7px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:${yearView==='jobs'?'white':'transparent'};color:${yearView==='jobs'?'var(--blue)':'var(--text3)'}">📋 Jobs</button>
+    <button onclick="closeSheet();openYearSheet('projects')" style="flex:1;padding:7px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:${yearView==='projects'?'white':'transparent'};color:${yearView==='projects'?'#E65100':'var(--text3)'}">🏗️ Projects</button>
+  </div>`;
 
-  if(!rows) rows = '<div style="text-align:center;padding:24px;color:var(--text3)">No data for '+year+' yet.</div>';
+  if(yearView === 'projects'){
+    // ── Project annual view ────────────────────────────────────
+    const projList = PROJECTS.filter(p=>{
+      const s=p.startDate||''; const e=p.endDate||'9999-12-31';
+      return s.startsWith(year) || e.startsWith(year);
+    });
+    let totalRev=0, totalExp=0, totalHrs=0;
+    projList.forEach(p=>{
+      totalRev += p.status==='completed'?(p.actualBilled||p.quotedPrice||0):(p.quotedPrice||0);
+      totalExp += (p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
+      totalHrs += (p.workDays||[]).reduce((s,d)=>s+(+d.hours||0),0);
+    });
+    const totalProfit = totalRev - totalExp;
+
+    const rows = projList.map(p=>{
+      const exp=(p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
+      const billed=p.status==='completed'?(p.actualBilled||p.quotedPrice||0):(p.quotedPrice||0);
+      const profit=billed-exp;
+      return `<div onclick="openProjectDetail('${p.id}');closeSheet()" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--border);cursor:pointer">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text)">${p.name}</div>
+          <div style="font-size:12px;color:var(--text3)">${p.category||''}${p.status==='completed'?' · ✓ Done':' · Active'}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:13px;font-weight:600;color:var(--green)">$${billed.toFixed(0)}</div>
+          ${exp?`<div style="font-size:11px;color:var(--red)">-$${exp.toFixed(0)} exp</div>`:''}
+          <div style="font-size:11px;color:${profit>=0?'var(--green)':'var(--red)'}">$${profit.toFixed(0)} profit</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    showSheet(`
+      <div class="sheet-title">${year} Annual Summary</div>
+      ${toggleBar}
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+        <div style="background:var(--green-bg);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-size:10px;font-weight:600;color:var(--green);text-transform:uppercase">Revenue</div>
+          <div style="font-size:18px;font-weight:700;color:var(--green)">$${totalRev.toFixed(0)}</div>
+        </div>
+        <div style="background:var(--red-bg);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-size:10px;font-weight:600;color:var(--red);text-transform:uppercase">Expenses</div>
+          <div style="font-size:18px;font-weight:700;color:var(--red)">$${totalExp.toFixed(0)}</div>
+        </div>
+        <div style="background:${totalProfit>=0?'var(--green-bg)':'var(--red-bg)'};border-radius:10px;padding:10px;text-align:center">
+          <div style="font-size:10px;font-weight:600;color:${totalProfit>=0?'var(--green)':'var(--red)'};text-transform:uppercase">Profit</div>
+          <div style="font-size:18px;font-weight:700;color:${totalProfit>=0?'var(--green)':'var(--red)'}">$${totalProfit.toFixed(0)}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px">${projList.length} project${projList.length!==1?'s':''} · ${totalHrs.toFixed(1)} total hrs</div>
+      <div style="max-height:45vh;overflow-y:auto">${rows||'<div style="text-align:center;padding:24px;color:var(--text3)">No projects for '+year+'.</div>'}</div>
+      <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Close</button>
+    `);
+    return;
+  }
+
+  // ── Jobs annual view (original) ────────────────────────────
+  let totalRev=0, totalExp=0, totalHrs=0, totalJobs=0;
+  const monthData = [];
+  for(let m=0; m<12; m++){
+    const keys = (()=>{
+      const s=year+'-'+String(m+1).padStart(2,'0')+'-01';
+      const e=year+'-'+String(m+1).padStart(2,'0')+'-'+String(new Date(year,m+1,0).getDate()).padStart(2,'0');
+      return Object.keys(SC).filter(k=>k>=s&&k<=e&&SC[k].length>0);
+    })();
+    let mRev=0,mExp=0,mHrs=0,mJobs=0;
+    keys.forEach(k=>{mRev+=tRev(k);mExp+=tExp(k);mHrs+=gHrs(k);mJobs+=gS(k).length;});
+    const mProfit=mRev-mExp-(mHrs*laborRate);
+    totalRev+=mRev;totalExp+=mExp;totalHrs+=mHrs;totalJobs+=mJobs;
+    if(mJobs>0)monthData.push({month:m,rev:mRev,exp:mExp,hrs:mHrs,jobs:mJobs,profit:mProfit});
+  }
+  const totalProfit=totalRev-totalExp-(totalHrs*laborRate);
+
+  const rows=monthData.map(md=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--border)">
+    <div><div style="font-size:15px;font-weight:600;color:var(--text)">${MN[md.month]} ${year}</div><div style="font-size:12px;color:var(--text3)">${md.jobs} job${md.jobs!==1?'s':''} · ${md.hrs.toFixed(1)} hrs</div></div>
+    <div style="text-align:right"><div style="font-size:14px;font-weight:600;color:var(--green)">$${md.rev.toFixed(0)}</div><div style="font-size:11px;color:var(--red)">-$${md.exp.toFixed(0)} exp</div><div style="font-size:11px;color:${md.profit>=0?'var(--green)':'var(--red)'}">$${md.profit.toFixed(0)} profit</div></div>
+  </div>`).join('');
 
   showSheet(`
     <div class="sheet-title">${year} Annual Summary</div>
+    ${toggleBar}
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
       <div style="background:var(--green-bg);border-radius:10px;padding:10px;text-align:center">
-        <div style="font-size:10px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:.05em">Revenue</div>
-        <div style="font-size:18px;font-weight:700;color:var(--green);margin-top:4px">$${totalRev.toFixed(0)}</div>
+        <div style="font-size:10px;font-weight:600;color:var(--green);text-transform:uppercase">Revenue</div>
+        <div style="font-size:18px;font-weight:700;color:var(--green)">$${totalRev.toFixed(0)}</div>
       </div>
       <div style="background:var(--red-bg);border-radius:10px;padding:10px;text-align:center">
-        <div style="font-size:10px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:.05em">Expenses</div>
-        <div style="font-size:18px;font-weight:700;color:var(--red);margin-top:4px">$${totalExp.toFixed(0)}</div>
+        <div style="font-size:10px;font-weight:600;color:var(--red);text-transform:uppercase">Expenses</div>
+        <div style="font-size:18px;font-weight:700;color:var(--red)">$${totalExp.toFixed(0)}</div>
       </div>
       <div style="background:${totalProfit>=0?'var(--green-bg)':'var(--red-bg)'};border-radius:10px;padding:10px;text-align:center">
-        <div style="font-size:10px;font-weight:600;color:${totalProfit>=0?'var(--green)':'var(--red)'};text-transform:uppercase;letter-spacing:.05em">Profit</div>
-        <div style="font-size:18px;font-weight:700;color:${totalProfit>=0?'var(--green)':'var(--red)'};margin-top:4px">$${totalProfit.toFixed(0)}</div>
+        <div style="font-size:10px;font-weight:600;color:${totalProfit>=0?'var(--green)':'var(--red)'};text-transform:uppercase">Profit</div>
+        <div style="font-size:18px;font-weight:700;color:${totalProfit>=0?'var(--green)':'var(--red)'}">$${totalProfit.toFixed(0)}</div>
       </div>
     </div>
-    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:10px;padding:0 2px">
-      <span>${totalJobs} total jobs</span>
-      <span>${totalHrs.toFixed(1)} total hrs</span>
-    </div>
-    <div style="max-height:50vh;overflow-y:auto">${rows}</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">${totalJobs} total jobs · ${totalHrs.toFixed(1)} total hrs</div>
+    <div style="max-height:45vh;overflow-y:auto">${rows||'<div style="text-align:center;padding:24px;color:var(--text3)">No data for '+year+' yet.</div>'}</div>
     <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Close</button>
   `);
 }
+
+
+// ─── PROJECTS ────────────────────────────────────────────────────
+// Project: { id, name, category, startDate, endDate, quotedPrice,
+//            notes, workDays:[{date,hours,notes}], expenses:[{id,cat,desc,amount,date}],
+//            status:'active'|'completed', invoiced:bool }
+let PROJECTS = [];
+let projTabState = 'active';
+
+function setProjTab(tab){
+  projTabState = tab;
+  const ta = document.getElementById('proj-tab-active');
+  const tc = document.getElementById('proj-tab-completed');
+  if(ta){ta.style.color=tab==='active'?'var(--blue)':'var(--text3)';ta.style.borderBottomColor=tab==='active'?'var(--blue)':'transparent';}
+  if(tc){tc.style.color=tab==='completed'?'var(--blue)':'var(--text3)';tc.style.borderBottomColor=tab==='completed'?'var(--blue)':'transparent';}
+  renderProjects();
+}
+
+function renderProjects(){
+  const list = PROJECTS.filter(p => projTabState==='active' ? p.status==='active' : p.status==='completed');
+  const body = document.getElementById('proj-body');
+  if(!body){setTimeout(renderProjects,100);return;}
+  if(!list.length){
+    body.innerHTML = '<div class="empty">No '+projTabState+' projects.<br>Tap <b>+ New Project</b> to create one.</div>';
+    return;
+  }
+  body.innerHTML = list.map(p => {
+    const totalExp = (p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
+    const totalHrs = (p.workDays||[]).reduce((s,d)=>s+(+d.hours||0),0);
+    const displayPrice = p.status==='completed' ? (p.actualBilled||p.quotedPrice||0) : (p.quotedPrice||0);
+    const net = displayPrice - totalExp;
+    const daysLeft = p.endDate ? Math.ceil((new Date(p.endDate+'T12:00:00')-new Date())/(1000*60*60*24)) : null;
+    return `<div onclick="openProjectDetail('${p.id}')" style="background:var(--card);border:0.5px solid var(--border);border-left:3px solid var(--blue);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="flex:1">
+          <div style="font-size:15px;font-weight:700;color:var(--text)">${p.name}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">${p.category||''}${p.startDate?' · '+fmtDate(p.startDate):''}</div>
+          <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+            ${displayPrice?`<span style="font-size:12px;font-weight:600;color:var(--blue)">$${displayPrice.toFixed(0)} ${p.status==='completed'?'billed':'quoted'}</span>`:''}
+            ${totalExp?`<span style="font-size:12px;color:var(--red)">-$${totalExp.toFixed(0)} exp</span>`:''}
+            ${totalHrs?`<span style="font-size:12px;color:var(--text3)">${totalHrs.toFixed(1)} hrs</span>`:''}
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;margin-left:10px">
+          ${p.status==='completed'?`<span style="font-size:11px;background:var(--green-bg);color:var(--green);font-weight:700;padding:3px 8px;border-radius:10px">Done</span>`:''}
+          ${daysLeft!==null&&p.status==='active'?`<div style="font-size:11px;color:${daysLeft<0?'var(--red)':daysLeft<=3?'var(--amber)':'var(--text3)'};margin-top:4px">${daysLeft<0?Math.abs(daysLeft)+' days over':''+daysLeft+' days left'}</div>`:''}
+        </div>
+      </div>
+      ${p.endDate?`<div style="margin-top:6px;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;background:var(--blue);border-radius:2px;width:${Math.min(100,Math.max(0,calcProgress(p)))}%"></div></div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function calcProgress(p){
+  if(!p.startDate||!p.endDate) return 0;
+  const start=new Date(p.startDate+'T12:00:00');
+  const end=new Date(p.endDate+'T12:00:00');
+  const now=new Date();
+  const total=end-start;
+  const elapsed=now-start;
+  return total>0?(elapsed/total)*100:0;
+}
+
+function openProjectForm(editId){
+  const ex = editId ? PROJECTS.find(p=>p.id===editId) : null;
+  const catOptions = ['Landscaping','Tree Work','Hardscape','Irrigation','Cleanup','Other',...SVCS.filter(s=>!['Landscaping','Tree Work','Hardscape','Irrigation','Cleanup','Other'].includes(s))];
+  const catChips = catOptions.map(c=>`<button class="chip${ex&&ex.category===c?' on':''}" onclick="document.querySelectorAll('#proj-cat-chips .chip').forEach(x=>x.classList.remove('on'));this.classList.add('on')">${c}</button>`).join('');
+  showSheet(`
+    <div class="sheet-title">${ex?'Edit Project':'New Project'}</div>
+    <div class="fl" style="margin-top:0">Project name</div>
+    <input type="text" id="pf-name" placeholder="e.g. Smith Backyard Overhaul" value="${ex?ex.name:''}"/>
+    <div class="fl">Category</div>
+    <div class="chips" id="proj-cat-chips">${catChips}</div>
+    <div class="fl">Start date</div>
+    <input type="date" id="pf-start" value="${ex?ex.startDate:TODAY}"/>
+    <div class="fl">End date (estimated)</div>
+    <input type="date" id="pf-end" value="${ex?ex.endDate:''}"/>
+    <div class="fl">Quoted price</div>
+    <div class="dollar-row"><span>$</span><input type="number" id="pf-price" placeholder="0.00" step="0.01" min="0" value="${ex?ex.quotedPrice:''}"/></div>
+    <div class="fl">Notes</div>
+    <textarea id="pf-notes" placeholder="Job description, scope, client details…">${ex?ex.notes:''}</textarea>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" onclick="saveProjectForm('${editId||''}')">${ex?'Save Changes':'Create Project'}</button>
+    </div>
+    ${ex?`<button class="btn-danger" onclick="deleteProject('${editId}')">Delete Project</button>`:''}
+  `);
+}
+
+function saveProjectForm(editId){
+  const name = (document.getElementById('pf-name').value||'').trim();
+  if(!name){ alert('Project name required'); return; }
+  const cat  = document.querySelector('#proj-cat-chips .chip.on')?.textContent||'';
+  const start= document.getElementById('pf-start').value;
+  const end  = document.getElementById('pf-end').value;
+  const price= parseFloat(document.getElementById('pf-price').value)||0;
+  const notes= document.getElementById('pf-notes').value.trim();
+  if(editId){
+    const p = PROJECTS.find(x=>x.id===editId);
+    if(p){ p.name=name;p.category=cat;p.startDate=start;p.endDate=end;p.quotedPrice=price;p.notes=notes; }
+    save(); closeAllSheets(); openProjectDetail(editId);
+  } else {
+    PROJECTS.push({id:uid(),name,category:cat,startDate:start,endDate:end,quotedPrice:price,actualBilled:null,notes,workDays:[],expenses:[],status:'active',invoiced:false});
+    save(); closeAllSheets(); renderProjects();
+  }
+}
+
+function deleteProject(id){
+  if(!confirm('Delete this project? This cannot be undone.'))return;
+  PROJECTS = PROJECTS.filter(p=>p.id!==id);
+  save(); closeAllSheets(); renderProjects();
+}
+
+function openProjectDetail(id){
+  const p = PROJECTS.find(x=>x.id===id);
+  if(!p) return;
+  const totalExp = (p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
+  const totalHrs = (p.workDays||[]).reduce((s,d)=>s+(+d.hours||0),0);
+  const profit = (p.actualBilled||p.quotedPrice||0) - totalExp;
+
+  const wdRows = (p.workDays||[]).map((d,i)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <div><div style="font-size:14px;font-weight:600">${fmtDate(d.date)}</div>${d.notes?`<div style="font-size:12px;color:var(--text3)">${d.notes}</div>`:''}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${d.hours?`<span style="font-size:13px;color:var(--blue);font-weight:600">${d.hours} hrs</span>`:''}
+        <button onclick="removeWorkDay('${id}',${i})" style="background:none;border:none;color:var(--red);font-size:16px;cursor:pointer">×</button>
+      </div>
+    </div>`).join('');
+
+  const expRows = (p.expenses||[]).map((e,i)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <div><div style="font-size:14px;font-weight:600;color:${ECAT_COLOR[e.cat]||'var(--text)'}">${e.cat}</div>${e.desc?`<div style="font-size:12px;color:var(--text3)">${e.desc}</div>`:''}<div style="font-size:11px;color:var(--text3)">${e.date?fmtDate(e.date):''}</div></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px;font-weight:600;color:var(--red)">-$${(+e.amount).toFixed(2)}</span>
+        <button onclick="removeProjExp('${id}',${i})" style="background:none;border:none;color:var(--red);font-size:16px;cursor:pointer">×</button>
+      </div>
+    </div>`).join('');
+
+  showSheet(`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+      <div class="sheet-title" style="margin-bottom:0;flex:1">${p.name}</div>
+      <button onclick="openProjectForm('${id}')" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px">✏️</button>
+    </div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:14px">${p.category||''}${p.startDate?' · '+fmtDate(p.startDate):''}${p.endDate?' → '+fmtDate(p.endDate):''}</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:14px">
+      <div onclick="editActualBilled('${p.id}')" style="background:var(--green-bg);border-radius:10px;padding:8px;text-align:center;cursor:pointer">
+        <div style="font-size:10px;font-weight:600;color:var(--green);text-transform:uppercase">${p.status==='completed'?'Billed ✏️':'Quoted'}</div>
+        <div style="font-size:16px;font-weight:700;color:var(--green)">$${(p.actualBilled||p.quotedPrice||0).toFixed(0)}</div>
+        ${p.status==='completed'&&p.actualBilled&&p.actualBilled!==p.quotedPrice?`<div style="font-size:10px;color:var(--text3)">quoted $${(p.quotedPrice||0).toFixed(0)}</div>`:''}
+      </div>
+      <div style="background:var(--red-bg);border-radius:10px;padding:8px;text-align:center">
+        <div style="font-size:10px;font-weight:600;color:var(--red);text-transform:uppercase">Expenses</div>
+        <div style="font-size:16px;font-weight:700;color:var(--red)">$${totalExp.toFixed(0)}</div>
+      </div>
+      <div style="background:${profit>=0?'var(--green-bg)':'var(--red-bg)'};border-radius:10px;padding:8px;text-align:center">
+        <div style="font-size:10px;font-weight:600;color:${profit>=0?'var(--green)':'var(--red)'};text-transform:uppercase">Profit</div>
+        <div style="font-size:16px;font-weight:700;color:${profit>=0?'var(--green)':'var(--red)'}">$${profit.toFixed(0)}</div>
+      </div>
+    </div>
+
+    ${p.quotedPrice?`<div style="display:flex;justify-content:space-between;background:var(--bg);border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:13px"><span style="color:var(--text3)">Quoted price</span><span style="font-weight:600;color:var(--text2)">$${(p.quotedPrice||0).toFixed(0)}</span></div>`:''}
+    ${p.notes?`<div style="background:var(--bg);border-radius:8px;padding:10px;font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.5">${p.notes}</div>`:''}
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Work Days · ${totalHrs.toFixed(1)} hrs total</div>
+      <button onclick="openAddWorkDay('${id}')" style="font-size:12px;color:var(--blue);background:none;border:0.5px solid var(--blue);border-radius:6px;padding:3px 8px;cursor:pointer">+ Add Day</button>
+    </div>
+    <div style="max-height:140px;overflow-y:auto;margin-bottom:14px">${wdRows||'<div style="font-size:13px;color:var(--text3);padding:8px 0">No work days logged yet.</div>'}</div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Expenses</div>
+      <button onclick="openAddProjExp('${id}')" style="font-size:12px;color:var(--red);background:none;border:0.5px solid var(--red);border-radius:6px;padding:3px 8px;cursor:pointer">+ Add Expense</button>
+    </div>
+    <div style="max-height:140px;overflow-y:auto;margin-bottom:14px">${expRows||'<div style="font-size:13px;color:var(--text3);padding:8px 0">No expenses logged yet.</div>'}</div>
+
+    <div style="display:flex;gap:8px;margin-top:4px">
+      ${p.status==='active'
+        ?`<button class="btn-save" style="flex:1;background:var(--green)" onclick="markProjectDone('${id}')">✓ Mark Complete</button>`
+        :`<button class="btn-outline" style="flex:1" onclick="reopenProject('${id}')">Reopen</button>`}
+      <button class="btn-cancel" onclick="closeSheet()">Close</button>
+    </div>
+  `);
+}
+
+function openAddWorkDay(projId){
+  showSheet(`
+    <div class="sheet-title">Log Work Day</div>
+    <div class="fl" style="margin-top:0">Date</div>
+    <input type="date" id="wd-date" value="${TODAY}"/>
+    <div class="fl">Hours worked</div>
+    <input type="number" id="wd-hours" placeholder="e.g. 6.5" step="0.5" min="0"/>
+    <div class="fl">Notes (optional)</div>
+    <input type="text" id="wd-notes" placeholder="e.g. Completed grading"/>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" onclick="saveWorkDay('${projId}')">Add Day</button>
+    </div>
+  `);
+}
+
+function saveWorkDay(projId){
+  const p = PROJECTS.find(x=>x.id===projId);
+  if(!p) return;
+  const date = document.getElementById('wd-date').value||TODAY;
+  const hours = parseFloat(document.getElementById('wd-hours').value)||0;
+  const notes = (document.getElementById('wd-notes').value||'').trim();
+  if(!p.workDays) p.workDays=[];
+  p.workDays.push({date,hours,notes});
+  p.workDays.sort((a,b)=>a.date.localeCompare(b.date));
+  save(); closeAllSheets(); openProjectDetail(projId);
+}
+
+function editActualBilled(id){
+  const p = PROJECTS.find(x=>x.id===id);
+  if(!p) return;
+  const cur = p.actualBilled||p.quotedPrice||0;
+  showSheet(`
+    <div class="sheet-title">Edit Billed Amount</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Quoted price: <b>$${(p.quotedPrice||0).toFixed(0)}</b></div>
+    <div class="fl" style="margin-top:0">Actual amount billed</div>
+    <div class="dollar-row"><span>$</span><input type="number" id="ab-inp" value="${cur}" step="0.01" min="0"/></div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" onclick="saveActualBilled('${id}')">Save</button>
+    </div>
+  `);
+}
+
+function saveActualBilled(id){
+  const p = PROJECTS.find(x=>x.id===id);
+  if(!p) return;
+  const val = parseFloat(document.getElementById('ab-inp').value)||0;
+  p.actualBilled = val;
+  save();
+  closeAllSheets();
+  openProjectDetail(id);
+}
+
+function removeWorkDay(projId, idx){
+  const p = PROJECTS.find(x=>x.id===projId);
+  if(!p) return;
+  p.workDays.splice(idx,1);
+  save(); closeAllSheets(); openProjectDetail(projId);
+}
+
+function openAddProjExp(projId){
+  const catChips = ECATS.map(c=>`<button class="chip${c===ECATS[0]?' on':''}" onclick="document.querySelectorAll('#pe-chips .chip').forEach(x=>x.classList.remove('on'));this.classList.add('on')">${c}</button>`).join('');
+  showSheet(`
+    <div class="sheet-title">Add Project Expense</div>
+    <div class="fl" style="margin-top:0">Category</div>
+    <div class="chips" id="pe-chips">${catChips}</div>
+    <div class="fl">Description</div>
+    <input type="text" id="pe-desc" placeholder="e.g. Mulch delivery"/>
+    <div class="fl">Amount</div>
+    <div class="dollar-row"><span>$</span><input type="number" id="pe-amt" placeholder="0.00" step="0.01" min="0"/></div>
+    <div class="fl">Date</div>
+    <input type="date" id="pe-date" value="${TODAY}"/>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" onclick="saveProjExp('${projId}')">Add Expense</button>
+    </div>
+  `);
+}
+
+function saveProjExp(projId){
+  const p = PROJECTS.find(x=>x.id===projId);
+  if(!p) return;
+  const amt = parseFloat(document.getElementById('pe-amt').value);
+  if(!amt){ alert('Enter an amount'); return; }
+  const cat  = document.querySelector('#pe-chips .chip.on')?.textContent||ECATS[0];
+  const desc = (document.getElementById('pe-desc').value||'').trim();
+  const date = document.getElementById('pe-date').value||TODAY;
+  if(!p.expenses) p.expenses=[];
+  p.expenses.push({id:uid(),cat,desc,amount:amt,date});
+  save(); closeAllSheets(); openProjectDetail(projId);
+}
+
+function removeProjExp(projId, idx){
+  const p = PROJECTS.find(x=>x.id===projId);
+  if(!p) return;
+  p.expenses.splice(idx,1);
+  save(); closeAllSheets(); openProjectDetail(projId);
+}
+
+function markProjectDone(id){
+  const p = PROJECTS.find(x=>x.id===id);
+  if(!p) return;
+  const totalHrs = (p.workDays||[]).reduce((s,d)=>s+(+d.hours||0),0);
+  const totalExp = (p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
+  const catChips = ECATS.map(c=>`<button class="chip${c===ECATS[0]?' on':''}" onclick="document.querySelectorAll('#mc-chips .chip').forEach(x=>x.classList.remove('on'));this.classList.add('on')">${c}</button>`).join('');
+
+  showSheet(`
+    <div class="sheet-title">Complete Project</div>
+    <div style="background:var(--green-bg);border-radius:10px;padding:12px 14px;margin-bottom:16px">
+      <div style="font-size:15px;font-weight:700;color:var(--green)">${p.name}</div>
+      <div style="font-size:13px;color:var(--green);margin-top:4px">${totalHrs.toFixed(1)} hrs worked · $${totalExp.toFixed(0)} in expenses</div>
+    </div>
+    <div class="fl" style="margin-top:0">Actual amount billed ($)</div>
+    <div class="dollar-row"><span>$</span><input type="number" id="mc-billed" placeholder="${(p.quotedPrice||0).toFixed(0)}" step="0.01" min="0" value="${p.actualBilled||p.quotedPrice||''}"/></div>
+    <div style="font-size:12px;color:var(--text3);margin-top:4px">Quoted price was $${(p.quotedPrice||0).toFixed(0)}</div>
+    <div style="border-top:0.5px solid var(--border);margin-top:16px;padding-top:14px">
+      <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:10px">Add a final expense? (optional)</div>
+      <div class="fl" style="margin-top:0">Category</div>
+      <div class="chips" id="mc-chips">${catChips}</div>
+      <div class="fl">Description</div>
+      <input type="text" id="mc-exp-desc" placeholder="e.g. Final materials"/>
+      <div class="fl">Amount</div>
+      <div class="dollar-row"><span>$</span><input type="number" id="mc-exp-amt" placeholder="Leave blank to skip" step="0.01" min="0"/></div>
+    </div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" style="background:var(--green)" onclick="confirmProjectDone('${id}')">✓ Mark Complete</button>
+    </div>
+  `);
+}
+
+function confirmProjectDone(id){
+  const p = PROJECTS.find(x=>x.id===id);
+  if(!p) return;
+  const billed = parseFloat(document.getElementById('mc-billed').value)||p.quotedPrice||0;
+  const expAmt = parseFloat(document.getElementById('mc-exp-amt').value)||0;
+  if(expAmt>0){
+    const cat = document.querySelector('#mc-chips .chip.on')?.textContent||ECATS[0];
+    const desc = (document.getElementById('mc-exp-desc').value||'').trim();
+    if(!p.expenses) p.expenses=[];
+    p.expenses.push({id:uid(),cat,desc,amount:expAmt,date:TODAY});
+  }
+  p.actualBilled = billed;
+  p.status = 'completed';
+  save();
+  closeAllSheets();
+  renderProjects();
+  showToast('Project marked complete');
+}
+
+function reopenProject(id){
+  const p = PROJECTS.find(x=>x.id===id);
+  if(p){ p.status='active'; save(); closeAllSheets(); renderProjects(); }
+}
+
+// Show project banner on schedule/upcoming if active projects span that day
+function getProjectsForDay(dateKey){
+  return PROJECTS.filter(p=>{
+    if(p.status!=='active') return false;
+    if(!p.startDate) return false;
+    const start = p.startDate;
+    const end = p.endDate || '9999-12-31';
+    return dateKey >= start && dateKey <= end;
+  });
+}
+
+function renderProjectBanner(dateKey){
+  const projs = getProjectsForDay(dateKey);
+  if(!projs.length) return '';
+  return projs.map(p=>`
+    <div onclick="openProjectDetail('${p.id}')" style="background:#FFF3E0;border-left:3px solid #E65100;border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:14px;font-weight:700;color:#E65100">🏗️ ${p.name}</div>
+        ${p.category?`<div style="font-size:12px;color:#BF360C;margin-top:2px">${p.category}</div>`:''}
+        ${p.endDate?`<div style="font-size:11px;color:#8D6E63;margin-top:1px">Until ${fmtDate(p.endDate)}</div>`:''}
+      </div>
+      <div style="font-size:18px;color:#E65100">›</div>
+    </div>`).join('');
+}
+
 
 // ─── INIT ─────────────────────────────────────────────────────────
 loadAll().then(()=>{
@@ -2195,6 +2774,7 @@ loadAll().then(()=>{
 renderSchedule();
 renderHistory();
 renderUpcoming();
+renderProjects();
 </script>
 </body>
 </html>
