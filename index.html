@@ -137,12 +137,12 @@ textarea{resize:vertical;min-height:52px}
 .wk-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:10px 12px;border-bottom:0.5px solid var(--border);flex-shrink:0;background:var(--card)}
 .dp{display:flex;flex-direction:column;align-items:center;padding:6px 2px;border-radius:10px;cursor:pointer;border:0.5px solid transparent}
 .dp.hj{background:var(--info-bg)}
-.dp.sel{background:var(--blue)}
+.dp.sel{background:transparent;box-shadow:0 0 0 2px var(--blue);}
 .dp-n{font-size:9px;color:var(--text3);font-weight:600;text-transform:uppercase}
 .dp-d{font-size:15px;font-weight:600;color:var(--text);margin-top:1px}
 .dp-c{font-size:10px;color:var(--text3);margin-top:2px;font-weight:600;min-height:13px}
 .dp.hj .dp-n,.dp.hj .dp-d,.dp.hj .dp-c{color:var(--blue)}
-.dp.sel .dp-n,.dp.sel .dp-d,.dp.sel .dp-c{color:#fff}
+.dp.sel .dp-n,.dp.sel .dp-d,.dp.sel .dp-c{color:var(--blue)}
 
 /* HISTORY */
 .mnav{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:0.5px solid var(--border);flex-shrink:0;background:var(--card)}
@@ -206,7 +206,7 @@ textarea{resize:vertical;min-height:52px}
 
   <!-- HISTORY SCREEN -->
   <div class="screen" id="scr-history">
-    <div class="hdr"><div class="hdr-title">History</div><button onclick="openSyncSettings()" title="Cloud sync settings" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px">⚙</button><button class="btn-primary" onclick="openExportSheet()" style="background:var(--green)">↑ Export</button></div>
+    <div class="hdr"><div class="hdr-title">History</div><button onclick="openSyncSettings()" title="Cloud sync settings" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px">⚙</button><button onclick="openYearSheet()" style="background:none;border:0.5px solid var(--amber);color:var(--amber);border-radius:20px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;margin-right:6px">📈 Year</button><button class="btn-primary" onclick="openExportSheet()" style="background:var(--green)">↑ Export</button></div>
     <div class="mnav">
       <button class="mnav-btn" onclick="histMO--;renderHistory()">‹</button>
       <span class="mnav-lbl" id="hist-month-lbl"></span>
@@ -224,7 +224,8 @@ textarea{resize:vertical;min-height:52px}
   <div class="screen" id="scr-upcoming">
     <div class="hdr">
       <div class="hdr-title" id="up-title">Upcoming</div>
-      <button onclick="openDaySheet()" style="background:none;border:0.5px solid var(--blue);color:var(--blue);border-radius:20px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;margin-right:6px">📋 Day Sheet</button>
+      <button onclick="openWeekSheet()" style="background:none;border:0.5px solid var(--amber);color:var(--amber);border-radius:20px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;margin-right:6px">📅 Week</button>
+      <button onclick="openDaySheet()" style="background:none;border:0.5px solid var(--blue);color:var(--blue);border-radius:20px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;margin-right:6px">📋 Day</button>
       <button class="btn-primary" onclick="openJobForm(null,null,selUpKey)">+ Add Job</button>
     </div>
     <div class="wk-nav">
@@ -592,7 +593,7 @@ function monthKeys(off){
   const y=d.getFullYear(),m=d.getMonth();
   const s=y+'-'+String(m+1).padStart(2,'0')+'-01';
   const e=y+'-'+String(m+1).padStart(2,'0')+'-'+String(new Date(y,m+1,0).getDate()).padStart(2,'0');
-  return Object.keys(SC).filter(k=>k>=s&&k<=e&&SC[k].length>0).sort((a,b)=>b.localeCompare(a));
+  return Object.keys(SC).filter(k=>k>=s&&k<=e&&SC[k].length>0).sort((a,b)=>a.localeCompare(b));
 }
 function monthStats(off){
   let rev=0,exp=0,hrs=0,col=0,out=0;
@@ -686,7 +687,7 @@ function jCardHTML(j,isDone,showPaid,isSkip){
           <span class="badge${isDone?' done':''}${isSkip?' skip':''}" style="${badgeSt}">${j.service}</span>
           ${!isSkip&&j.price?`<span class="ptag">$${(+j.price).toFixed(2)}</span>`:''}
           ${et?`<span class="etag">-$${et.toFixed(2)}</span>`:''}
-          ${showPaid&&!isSkip?`<button class="badge ${paid?'paid':'unpaid'}" onclick="togglePaidBtn('${j.id}')" style="border:none;cursor:pointer;font-family:inherit">🫴 ${paid?'Paid':'Pay'}</button>`:''}
+          ${showPaid&&!isSkip?`<button class="badge ${paid?'paid':'unpaid'}" onclick="togglePaidBtn('${j.id}')" style="border:none;cursor:pointer;font-family:inherit;font-weight:600">${paid?'✓ Paid':'💰 Pay'}</button>`:''}
         </div>
         ${j.note?`<div class="jnote">${j.note}</div>`:''}
         ${er?`<div class="exp-list">${er}</div>`:''}
@@ -1010,7 +1011,11 @@ function addNewProfile(){
   if(!loc){alert('Location is required');return;}
   PROFILES.push({name,loc,service:svc,price});
   save();
-  renderProfileMgr();
+  closeSheet(); // close profile mgr only — job form stays open underneath
+  showToast('Profile added: '+name);
+  // Refresh the profile picker button text in the job form if it's open
+  const btn = document.getElementById('prof-select-btn');
+  if(btn) btn.textContent = name;
 }
 
 function applyProfileSelect(){
@@ -1373,7 +1378,7 @@ function renderHistory(){
       <div class="tile click" onclick="openExpTile()"><div class="tile-l">Expenses ›</div><div class="tile-v r">$${s.exp.toFixed(0)}</div><div class="tile-s">tap for breakdown</div></div>
       ${profTile}
     </div>
-    <div class="pnote">Profit = Revenue − Expenses − (${s.hrs.toFixed(1)} hrs × $${laborRate}/hr)</div>`;
+`;
 
   renderHistList(document.getElementById('hist-search').value||'');
 }
@@ -1383,25 +1388,20 @@ function renderHistList(filter){
   const keys=monthKeys(histMO);
   const fk=f?keys.filter(k=>gS(k).some(j=>j.loc.toLowerCase().includes(f))):keys;
   if(!fk.length){document.getElementById('hist-body').innerHTML='<div class="empty">No days recorded this month.</div>';return;}
-  document.getElementById('hist-body').innerHTML=fk.map(k=>{
+  const showTodayLine=(histMO===0);
+  let passedToday=false;
+  const rows=[];
+  const todayDivider='<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="flex:1;height:2px;background:var(--blue)"></div><span style="font-size:11px;color:var(--blue);font-weight:700;white-space:nowrap;padding:0 4px">TODAY</span><div style="flex:1;height:2px;background:var(--blue)"></div></div>';
+  fk.forEach(k=>{
+    if(showTodayLine&&!passedToday&&k>TODAY){passedToday=true;rows.push(todayDivider);}
     const rev=tRev(k),exp=tExp(k),hrs=gHrs(k),net=rev-exp;
     const paid=gS(k).filter(j=>isPaid(j.id)&&!j.skipped).reduce((s,j)=>s+(+j.price||0),0);
     const out=rev-paid;
-    return`<div class="hist-row" onclick="openHistDay('${k}')">
-      <div>
-        <div class="hist-date">${fmtDate(k)}</div>
-        <div class="hist-meta">${gS(k).length} job${gS(k).length>1?'s':''}${hrs?' · '+hrs+' hrs':' · no hours'}</div>
-        ${out>0?`<div class="hist-outstanding">$${out.toFixed(0)} outstanding</div>`:''}
-      </div>
-      <div style="text-align:right">
-        <div class="hist-rev">$${rev.toFixed(2)}</div>
-        ${exp?`<div style="font-size:11px;color:var(--red)">-$${exp.toFixed(2)} exp</div>`:''}
-        <div style="font-size:11px;color:var(--text3)">net $${net.toFixed(0)}</div>
-      </div>
-    </div>`;
-  }).join('');
+    rows.push('<div class="hist-row" onclick="openHistDay(\'' + k + '\')"><div><div class="hist-date">' + fmtDate(k) + '</div><div class="hist-meta">' + gS(k).length + ' job' + (gS(k).length>1?'s':'') + (hrs?' · '+hrs+' hrs':' · no hours') + '</div>' + (out>0?'<div class="hist-outstanding">$'+out.toFixed(0)+' outstanding</div>':'') + '</div><div style="text-align:right"><div class="hist-rev">$'+rev.toFixed(2)+'</div>'+(exp?'<div style="font-size:11px;color:var(--red)">-$'+exp.toFixed(2)+' exp</div>':'')+'<div style="font-size:11px;color:var(--text3)">net $'+net.toFixed(0)+'</div></div></div>');
+  });
+  if(showTodayLine&&!passedToday){rows.push(todayDivider);}
+  document.getElementById('hist-body').innerHTML=rows.join('');
 }
-
 function onHistSearch(){
   const val=document.getElementById('hist-search').value.trim().toLowerCase();
   const ac=document.getElementById('ac-drop');
@@ -1424,11 +1424,12 @@ function openHistDay(k){
   const jobRows=gS(k).map(j=>{
     const et=(j.jE||[]).reduce((s,e)=>s+(+e.amount||0),0);
     const p=isPaid(j.id);
+    const hpn=profileNameFor(j);
     return`<div class="jcard ${j.service.toLowerCase().replace(' ','')}${j.skipped?' skipped':''}" style="border-left-color:${j.skipped?'var(--border)':SVC_COLOR[j.service]||'var(--border)'}">
       <div class="jrow">
         <div class="ck on" style="flex-shrink:0">${j.skipped?'—':'✓'}</div>
         <div class="jinfo">
-          <div class="jloc${j.skipped?' skip':''}">${(()=>{const pn=profileNameFor(j);return pn.addr?'<div class="jloc-name">'+pn.name+(j.skipped?' <span style="font-size:11px">(skipped)</span>':'')+' </div><div class="jloc-addr">'+pn.addr+'</div>':pn.name+(j.skipped?' <span style="font-size:11px">(skipped)</span>':'');})()}</div>
+          <div class="jloc${j.skipped?' skip':''}">\n            ${hpn.addr?('<div class="jloc-name">'+hpn.name+(j.skipped?' <span style="font-size:11px">(skipped)</span>':'')+' </div><div class="jloc-addr">'+hpn.addr+'</div>'):(hpn.name+(j.skipped?' <span style="font-size:11px">(skipped)</span>':''))}\n          </div>
           <div class="badges">
             <span class="badge${j.skipped?' skip':' done'}">${j.service}</span>
             ${!j.skipped&&j.price?`<span class="ptag">$${(+j.price).toFixed(2)}</span>`:''}
@@ -1438,7 +1439,7 @@ function openHistDay(k){
         </div>
         <div class="card-btns">
           ${!j.skipped?`<button class="icon-btn" onclick="openAddJobExpHist('${j.id}','${k}')" title="Add expense" style="color:var(--red);font-weight:700">$</button>`:''}
-          ${!j.skipped?`<button class="icon-btn" onclick="toggleHistPaid('${j.id}','${k}',this)" title="${p?'Mark unpaid':'Mark paid'}" style="color:${p?'var(--green)':'var(--amber)'};font-size:18px">🫴</button>`:''}
+          ${!j.skipped?`<button class="icon-btn" onclick="toggleHistPaid('${j.id}','${k}',this)" title="${p?'Mark unpaid':'Mark paid'}" style="color:${p?'var(--green)':'var(--amber)'};font-size:18px;font-weight:700">${p?'✓':'💰'}</button>`:''}
           <button class="icon-btn" onclick="deleteHistJob('${j.id}','${k}')" title="Delete job" style="font-size:14px">🗑</button>
         </div>
       </div>
@@ -1477,6 +1478,7 @@ function toggleHistPaid(jid, k, btn){
   save();
   const p = isPaid(jid);
   btn.style.color = p ? 'var(--green)' : 'var(--amber)';
+  btn.textContent = p ? '✓' : '💰';
   btn.title = p ? 'Mark unpaid' : 'Mark paid';
   const rev = tRev(k);
   const paidAmt = gS(k).filter(j=>isPaid(j.id)&&!j.skipped).reduce((s,j)=>s+(+j.price||0),0);
@@ -1528,7 +1530,9 @@ function saveHistJobExp(jid,k){
   if(!amt){alert('Enter an amount');return;}
   const j=gS(k).find(x=>x.id===jid);
   if(j){if(!j.jE)j.jE=[];j.jE.push({id:uid(),cat:document.querySelector('#hjexp-chips .chip.on')?.textContent||ECATS[0],desc:document.getElementById('hjexp-desc').value.trim(),amount:amt});save();}
-  closeSheet();renderHistory();setTimeout(()=>openHistDay(k),50);
+  renderHistory();
+  closeAllSheets();
+  openHistDay(k);
 }
 
 // ─── HISTORY TILES ────────────────────────────────────────────────
@@ -1644,8 +1648,13 @@ function deleteHistJob(jid,k){
   if(!confirm('Delete this job?'))return;
   SC[k]=(SC[k]||[]).filter(j=>j.id!==jid);
   save();
-  if(gS(k).length===0){closeSheet();renderHistory();}
-  else{closeSheet();setTimeout(()=>openHistDay(k),50);}
+  renderHistory();
+  if(gS(k).length===0){
+    closeAllSheets();
+  } else {
+    closeAllSheets();
+    openHistDay(k);
+  }
   showToast('Job deleted');
 }
 
@@ -1670,7 +1679,9 @@ function renderUpcoming(){
   const strip=Array.from({length:7},(_,i)=>{
     const d=addDays(wsDate,i),k=toKey(d);
     const has=SC[k]&&SC[k].length>0,isSel=k===selUpKey;
+    const isToday=(k===TODAY);
     return`<div class="dp${has?' hj':''}${isSel?' sel':''}" onclick="selUpKey='${k}';renderUpcoming()">
+      <div style="font-size:9px;text-align:center;color:var(--red);line-height:1;margin-bottom:1px">${isToday?'▼':''}</div>
       <div class="dp-n">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]}</div>
       <div class="dp-d">${d.getDate()}</div>
       <div class="dp-c">${SC[k]&&SC[k].length?SC[k].length:''}</div>
@@ -1815,6 +1826,10 @@ function showSheet(html,afterRender){
 function closeSheet(){
   const root=document.getElementById('modal-root');
   const last=root.lastChild;if(last)last.remove();
+}
+function closeAllSheets(){
+  const root=document.getElementById('modal-root');
+  while(root.lastChild) root.lastChild.remove();
 }
 
 function showToast(msg){
@@ -1997,16 +2012,16 @@ function openDaySheet(){
     const pn = profileNameFor(j);
     const emoji = SVC_EMOJI[j.service] || '📍';
     html += `
-    <div style="border:1.5px solid #E0DDD8;border-radius:14px;padding:16px;margin-bottom:12px">
-      <div style="display:flex;align-items:flex-start;gap:12px">
-        <div style="font-size:28px;flex-shrink:0;line-height:1">${emoji}</div>
+    <div style="border:1.5px solid #E0DDD8;border-radius:10px;padding:8px 12px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="font-size:18px;flex-shrink:0;line-height:1">${emoji}</div>
         <div style="flex:1">
-          <div style="font-size:18px;font-weight:700;color:#1A1A18;line-height:1.2">${pn.name}</div>
-          ${pn.addr?`<div style="font-size:14px;color:#6B6966;margin-top:3px">📍 ${pn.addr}</div>`:`<div style="font-size:14px;color:#6B6966;margin-top:3px">📍 ${j.loc}</div>`}
-          <div style="display:inline-block;margin-top:8px;background:#F1EFE8;border-radius:8px;padding:4px 10px;font-size:13px;font-weight:600;color:#6B6966">${j.service}</div>
-          ${j.note?`<div style="font-size:13px;color:#9E9B97;margin-top:8px;font-style:italic;border-top:0.5px solid #E0DDD8;padding-top:8px">📝 ${j.note}</div>`:''}
+          <div style="font-size:15px;font-weight:700;color:#1A1A18;line-height:1.2">${pn.name}</div>
+          ${pn.addr?`<div style="font-size:12px;color:#6B6966">📍 ${pn.addr}</div>`:`<div style="font-size:12px;color:#6B6966">📍 ${j.loc}</div>`}
+          <div style="display:inline-block;background:#F1EFE8;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:600;color:#6B6966;margin-top:3px">${j.service}</div>
+          ${j.note?`<div style="font-size:11px;color:#9E9B97;font-style:italic;border-top:0.5px solid #E0DDD8;padding-top:4px;margin-top:4px">📝 ${j.note}</div>`:''}
         </div>
-        <div style="font-size:20px;font-weight:800;color:#185FA5;flex-shrink:0">${idx+1}</div>
+        <div style="font-size:16px;font-weight:800;color:#185FA5;flex-shrink:0">${idx+1}</div>
       </div>
     </div>`;
   });
@@ -2024,6 +2039,153 @@ function openDaySheet(){
 function closeDaySheet(){
   document.getElementById('day-sheet-overlay').style.display = 'none';
   document.body.style.overflow = '';
+}
+
+function openWeekSheet(){
+  const ws = wkStart(addDays(new Date(), fwOff*7));
+  const wsDate = new Date(ws+'T12:00:00');
+  const days = Array.from({length:7}, (_,i) => addDays(wsDate, i));
+  const ML = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const DN = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const wkEnd = addDays(wsDate, 6);
+  const wkLabel = ML[wsDate.getMonth()]+' '+wsDate.getDate()+' – '+ML[wkEnd.getMonth()]+' '+wkEnd.getDate();
+
+  // Only include days that have jobs
+  const activeDays = days.filter(d => {
+    const k = toKey(d);
+    return SC[k] && SC[k].filter(j=>!j.skipped).length > 0;
+  });
+
+  if(!activeDays.length){
+    alert('No jobs scheduled this week.');
+    return;
+  }
+
+  let content = `
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:24px;font-weight:800;color:#1A1A18">Week of ${wkLabel}</div>
+      <div style="font-size:13px;color:#9E9B97;margin-top:3px">${activeDays.length} day${activeDays.length>1?'s':''} with jobs</div>
+    </div>`;
+
+  activeDays.forEach(d => {
+    const k = toKey(d);
+    const jobs = SC[k].filter(j=>!j.skipped);
+    const totalJobs = jobs.length;
+
+    // Count jobs by service type
+    const svcCounts = {};
+    jobs.forEach(j => {
+      svcCounts[j.service] = (svcCounts[j.service]||0) + 1;
+    });
+
+    const SVC_EMOJI = {Lawncare:'🌿',Treework:'🌳',Mulching:'🍂',Landscaping:'🏡',Maintenance:'🔧'};
+    const svcLines = Object.keys(svcCounts).map(svc =>
+      `<div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+        <span style="font-size:14px">${SVC_EMOJI[svc]||'📍'}</span>
+        <span style="font-size:13px;color:#1A1A18;font-weight:600">${svc}</span>
+        <span style="font-size:13px;color:#6B6966">${svcCounts[svc]}x</span>
+      </div>`
+    ).join('');
+
+    content += `
+    <div style="border:1.5px solid #E0DDD8;border-radius:10px;padding:10px 14px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="font-size:16px;font-weight:800;color:#1A1A18">${DN[d.getDay()]}</div>
+        <div style="font-size:12px;background:#F1EFE8;border-radius:6px;padding:2px 8px;color:#6B6966;font-weight:600">${totalJobs} job${totalJobs>1?'s':''}</div>
+      </div>
+      ${svcLines}
+    </div>`;
+  });
+
+  content += `
+    <div style="text-align:center;margin-top:20px;padding-top:12px;border-top:0.5px solid #E0DDD8">
+      <div style="font-size:11px;color:#9E9B97">LawnApp · Week of ${wkLabel}</div>
+    </div>`;
+
+  document.getElementById('day-sheet-content').innerHTML = content;
+  document.getElementById('day-sheet-overlay').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+}
+
+// ─── YEARLY STATS ────────────────────────────────────────────────
+function openYearSheet(){
+  const year = new Date().getFullYear();
+
+  // Calculate stats for each month of the current year
+  let totalRev=0, totalExp=0, totalHrs=0, totalJobs=0;
+  const monthData = [];
+
+  for(let m=0; m<12; m++){
+    const off = m - new Date().getMonth(); // offset from current month
+    const keys = (() => {
+      const d = new Date(year, m, 1);
+      const s = year+'-'+String(m+1).padStart(2,'0')+'-01';
+      const e = year+'-'+String(m+1).padStart(2,'0')+'-'+String(new Date(year,m+1,0).getDate()).padStart(2,'0');
+      return Object.keys(SC).filter(k=>k>=s&&k<=e&&SC[k].length>0);
+    })();
+
+    let mRev=0, mExp=0, mHrs=0, mJobs=0;
+    keys.forEach(k=>{
+      mRev += tRev(k);
+      mExp += tExp(k);
+      mHrs += gHrs(k);
+      mJobs += gS(k).length;
+    });
+    const mProfit = mRev - mExp - (mHrs * laborRate);
+
+    totalRev += mRev;
+    totalExp += mExp;
+    totalHrs += mHrs;
+    totalJobs += mJobs;
+
+    if(mJobs > 0 || keys.length > 0){
+      monthData.push({month: m, rev: mRev, exp: mExp, hrs: mHrs, jobs: mJobs, profit: mProfit});
+    }
+  }
+
+  const totalProfit = totalRev - totalExp - (totalHrs * laborRate);
+  const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  let rows = '';
+  monthData.forEach(md => {
+    rows += `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--border)">
+      <div>
+        <div style="font-size:15px;font-weight:600;color:var(--text)">${MN[md.month]} ${year}</div>
+        <div style="font-size:12px;color:var(--text3)">${md.jobs} job${md.jobs!==1?'s':''} · ${md.hrs.toFixed(1)} hrs</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:14px;font-weight:600;color:var(--green)">$${md.rev.toFixed(0)}</div>
+        <div style="font-size:11px;color:var(--red)">-$${md.exp.toFixed(0)} exp</div>
+        <div style="font-size:11px;color:${md.profit>=0?'var(--green)':'var(--red)'}">$${md.profit.toFixed(0)} profit</div>
+      </div>
+    </div>`;
+  });
+
+  if(!rows) rows = '<div style="text-align:center;padding:24px;color:var(--text3)">No data for '+year+' yet.</div>';
+
+  showSheet(`
+    <div class="sheet-title">${year} Annual Summary</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+      <div style="background:var(--green-bg);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:10px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:.05em">Revenue</div>
+        <div style="font-size:18px;font-weight:700;color:var(--green);margin-top:4px">$${totalRev.toFixed(0)}</div>
+      </div>
+      <div style="background:var(--red-bg);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:10px;font-weight:600;color:var(--red);text-transform:uppercase;letter-spacing:.05em">Expenses</div>
+        <div style="font-size:18px;font-weight:700;color:var(--red);margin-top:4px">$${totalExp.toFixed(0)}</div>
+      </div>
+      <div style="background:${totalProfit>=0?'var(--green-bg)':'var(--red-bg)'};border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:10px;font-weight:600;color:${totalProfit>=0?'var(--green)':'var(--red)'};text-transform:uppercase;letter-spacing:.05em">Profit</div>
+        <div style="font-size:18px;font-weight:700;color:${totalProfit>=0?'var(--green)':'var(--red)'};margin-top:4px">$${totalProfit.toFixed(0)}</div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:10px;padding:0 2px">
+      <span>${totalJobs} total jobs</span>
+      <span>${totalHrs.toFixed(1)} total hrs</span>
+    </div>
+    <div style="max-height:50vh;overflow-y:auto">${rows}</div>
+    <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Close</button>
+  `);
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
