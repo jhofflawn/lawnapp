@@ -827,22 +827,53 @@ function openProfilePicker(){
     return;
   }
   // Build a sheet with large tappable rows - easy to tap, no scroll-select conflict
+  // Build rows with touch-safe selection
   const rows = PROFILES.map((p,i)=>`
-    <div onclick="selectProfile(${i})" style="display:flex;align-items:center;justify-content:space-between;padding:14px 4px;border-bottom:0.5px solid var(--border);cursor:pointer;active-bg:var(--bg)">
+    <div data-pidx="${i}" class="prof-pick-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px 4px;border-bottom:0.5px solid var(--border);cursor:pointer;-webkit-user-select:none;user-select:none">
       <div>
         <div style="font-size:15px;font-weight:600;color:var(--text)">${p.name}</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">${p.service} · $${p.price} · ${p.loc}</div>
       </div>
-      <div style="font-size:20px;color:var(--text3)">›</div>
+      <div style="font-size:20px;color:var(--text3);flex-shrink:0;padding-left:10px">›</div>
     </div>`).join('');
 
   showSheet(`
     <div class="sheet-title">Select Profile</div>
-    <div style="max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
+    <div id="prof-scroll-list" style="max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
       ${rows}
     </div>
     <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Cancel</button>
-  `);
+  `, ()=>{
+    // Attach scroll-aware touch handlers AFTER sheet renders
+    const list = document.getElementById('prof-scroll-list');
+    if(!list) return;
+    let startY = 0, startScrollTop = 0, didScroll = false;
+    list.addEventListener('touchstart', e=>{
+      startY = e.touches[0].clientY;
+      startScrollTop = list.scrollTop;
+      didScroll = false;
+    }, {passive:true});
+    list.addEventListener('touchmove', e=>{
+      if(Math.abs(e.touches[0].clientY - startY) > 5){
+        didScroll = true;
+      }
+    }, {passive:true});
+    // Use touchend on each row instead of onclick
+    list.querySelectorAll('.prof-pick-row').forEach(row=>{
+      row.addEventListener('touchend', e=>{
+        if(didScroll) return; // was a scroll, not a tap
+        e.preventDefault();
+        const idx = +row.dataset.pidx;
+        selectProfile(idx);
+      });
+      // Also support mouse click for PC
+      row.addEventListener('click', e=>{
+        if(didScroll) return;
+        const idx = +row.dataset.pidx;
+        selectProfile(idx);
+      });
+    });
+  });
 }
 
 function selectProfile(i){
@@ -933,22 +964,53 @@ function openProfilePicker(){
     return;
   }
   // Build a sheet with large tappable rows - easy to tap, no scroll-select conflict
+  // Build rows with touch-safe selection
   const rows = PROFILES.map((p,i)=>`
-    <div onclick="selectProfile(${i})" style="display:flex;align-items:center;justify-content:space-between;padding:14px 4px;border-bottom:0.5px solid var(--border);cursor:pointer;active-bg:var(--bg)">
+    <div data-pidx="${i}" class="prof-pick-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px 4px;border-bottom:0.5px solid var(--border);cursor:pointer;-webkit-user-select:none;user-select:none">
       <div>
         <div style="font-size:15px;font-weight:600;color:var(--text)">${p.name}</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">${p.service} · $${p.price} · ${p.loc}</div>
       </div>
-      <div style="font-size:20px;color:var(--text3)">›</div>
+      <div style="font-size:20px;color:var(--text3);flex-shrink:0;padding-left:10px">›</div>
     </div>`).join('');
 
   showSheet(`
     <div class="sheet-title">Select Profile</div>
-    <div style="max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
+    <div id="prof-scroll-list" style="max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
       ${rows}
     </div>
     <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Cancel</button>
-  `);
+  `, ()=>{
+    // Attach scroll-aware touch handlers AFTER sheet renders
+    const list = document.getElementById('prof-scroll-list');
+    if(!list) return;
+    let startY = 0, startScrollTop = 0, didScroll = false;
+    list.addEventListener('touchstart', e=>{
+      startY = e.touches[0].clientY;
+      startScrollTop = list.scrollTop;
+      didScroll = false;
+    }, {passive:true});
+    list.addEventListener('touchmove', e=>{
+      if(Math.abs(e.touches[0].clientY - startY) > 5){
+        didScroll = true;
+      }
+    }, {passive:true});
+    // Use touchend on each row instead of onclick
+    list.querySelectorAll('.prof-pick-row').forEach(row=>{
+      row.addEventListener('touchend', e=>{
+        if(didScroll) return; // was a scroll, not a tap
+        e.preventDefault();
+        const idx = +row.dataset.pidx;
+        selectProfile(idx);
+      });
+      // Also support mouse click for PC
+      row.addEventListener('click', e=>{
+        if(didScroll) return;
+        const idx = +row.dataset.pidx;
+        selectProfile(idx);
+      });
+    });
+  });
 }
 
 function selectProfile(i){
