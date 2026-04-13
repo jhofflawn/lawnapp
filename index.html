@@ -432,23 +432,81 @@ async function pullFromCloud(){
 // ── Settings sheet ───────────────────────────────────────────────
 function openSyncSettings(){
   showSheet(`
-    <div class="sheet-title">Cloud Sync Setup</div>
-    <div style="background:var(--info-bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--blue);line-height:1.7">
-      <b>One-time setup:</b><br>
-      1. Go to <b>jsonbin.io</b> and create a free account<br>
-      2. Click your avatar → API Keys<br>
-      3. Copy your <b>Master Key</b> and paste below<br>
-      4. Tap Save — syncing starts automatically
+    <div class="sheet-title">Cloud Sync</div>
+    <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:12px;font-family:monospace;word-break:break-all;line-height:1.6">
+      <b>Key:</b> ${jbinApiKey ? jbinApiKey.slice(0,20)+'...' : 'Not set'}<br>
+      <b>Bin ID:</b> ${jbinBinId || 'Not created yet'}<br>
+      <b>Status:</b> <span id="sync-status-txt">Checking...</span>
     </div>
     <div class="fl" style="margin-top:0">JSONBin Master Key</div>
     <input type="text" id="jbin-key-inp" placeholder="$2a$10$..." value="${jbinApiKey}" autocomplete="off" autocorrect="off" spellcheck="false" style="font-size:13px;font-family:monospace"/>
-    ${jbinBinId?`<div style="font-size:11px;color:var(--text3);margin-top:6px">Bin ID: ${jbinBinId}</div>`:''}
-    <div style="display:flex;gap:8px;margin-top:14px">
+    <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
       <button class="btn-save" onclick="saveSyncKey()">Save & Sync</button>
     </div>
-    ${jbinApiKey?`<button class="btn-danger" style="margin-top:8px" onclick="clearSyncKey()">Disconnect cloud sync</button>`:''}
-  `);
+    <button onclick="testSync()" style="width:100%;margin-top:8px;background:none;border:0.5px solid var(--blue);color:var(--blue);border-radius:10px;padding:11px;font-size:14px;cursor:pointer">🔍 Test Connection</button>
+    ${jbinApiKey?`<button class="btn-danger" style="margin-top:8px" onclick="clearSyncKey()">Disconnect</button>`:''}
+  `, ()=>{
+    // Show live status
+    const el = document.getElementById('sync-status-txt');
+    if(el) el.textContent = jbinApiKey ? (jbinBinId ? 'Key + Bin ID set' : 'Key set, no bin yet') : 'Not configured';
+  });
+}
+
+async function testSync(){
+  const key = (document.getElementById('jbin-key-inp')?.value || jbinApiKey || '').trim();
+  if(!key){ alert('Enter your Master Key first'); return; }
+  
+  const statusEl = document.getElementById('sync-status-txt');
+  if(statusEl) statusEl.textContent = 'Testing...';
+  
+  try{
+    // Test 1: Can we reach JSONBin at all?
+    const r = await fetch('https://api.jsonbin.io/v3/b', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': key,
+        'X-Bin-Name': 'LawnApp-Test',
+        'X-Bin-Private': 'true'
+      },
+      body: JSON.stringify({test: true, ts: Date.now()})
+    });
+    const txt = await r.text();
+    if(!r.ok){
+      alert('Connection test FAILED\nHTTP ' + r.status + '\n' + txt.slice(0,200));
+      if(statusEl) statusEl.textContent = 'FAILED: HTTP ' + r.status;
+      return;
+    }
+    const j = JSON.parse(txt);
+    const testBinId = j.metadata?.id;
+    if(!testBinId){
+      alert('Connected but got unexpected response:\n' + txt.slice(0,200));
+      return;
+    }
+    
+    // Test 2: Can we read back?
+    const r2 = await fetch('https://api.jsonbin.io/v3/b/'+testBinId+'/latest', {
+      headers: {'X-Master-Key': key}
+    });
+    if(!r2.ok){
+      alert('Write worked but read failed\nHTTP ' + r2.status);
+      return;
+    }
+    
+    // Clean up test bin
+    fetch('https://api.jsonbin.io/v3/b/'+testBinId, {
+      method: 'DELETE',
+      headers: {'X-Master-Key': key}
+    }).catch(()=>{});
+    
+    alert('✓ Connection successful!\nJSONBin is working correctly.\nNow tap Save & Sync to start syncing your data.');
+    if(statusEl) statusEl.textContent = '✓ Connection OK';
+    
+  }catch(e){
+    alert('Connection test ERROR:\n' + e.message + '\n\nThis usually means a network issue or the key is wrong.');
+    if(statusEl) statusEl.textContent = 'ERROR: ' + e.message.slice(0,40);
+  }
 }
 
 function saveSyncKey(){
