@@ -773,10 +773,7 @@ function openJobForm(editId,editKey,defKey){
     <div class="sheet-title">${ex?'Edit job':'Add job'}</div>
     ${!ex?`<div class="fl">Job profile</div>
     <div style="display:flex;gap:6px;margin-bottom:4px">
-      <select id="prof-select" onchange="applyProfileSelect()" style="flex:1">
-        <option value="">— Select a profile —</option>
-        ${PROFILES.map((p,i)=>'<option value="'+i+'">'+p.name+'</option>').join('')}
-      </select>
+      <button id="prof-select-btn" onclick="openProfilePicker()" style="flex:1;text-align:left;padding:10px 12px;border:0.5px solid var(--border);border-radius:8px;background:var(--bg);font-size:15px;color:var(--text2);cursor:pointer">— Select a profile —</button>
       <button onclick="openProfileMgr()" style="padding:0 10px;border:0.5px solid var(--border);border-radius:8px;background:none;cursor:pointer;font-size:18px" title="Manage profiles">⚙</button>
     </div>
     <div class="pdivider"><span>or enter manually</span></div>`:''}
@@ -821,12 +818,49 @@ function addJeRow(){window._jeItems.push({id:uid(),cat:ECATS[0],desc:'',amount:'
 
 function pickSvc(btn,svc){document.querySelectorAll('#svc-chips .chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');}
 function applyProfileSelect(){
-  const sel=document.getElementById('prof-select');
-  if(!sel||sel.value==='')return;
-  const p=PROFILES[+sel.value];if(!p)return;
-  document.getElementById('jf-loc').value=p.loc;
-  document.getElementById('jf-price').value=p.price;
-  document.querySelectorAll('#svc-chips .chip').forEach(c=>{c.classList.toggle('on',c.textContent===p.service);});
+  // kept for compatibility
+}
+
+function openProfilePicker(){
+  if(!PROFILES.length){
+    alert('No profiles yet. Tap ⚙ to add one.');
+    return;
+  }
+  // Build a sheet with large tappable rows - easy to tap, no scroll-select conflict
+  const rows = PROFILES.map((p,i)=>`
+    <div onclick="selectProfile(${i})" style="display:flex;align-items:center;justify-content:space-between;padding:14px 4px;border-bottom:0.5px solid var(--border);cursor:pointer;active-bg:var(--bg)">
+      <div>
+        <div style="font-size:15px;font-weight:600;color:var(--text)">${p.name}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">${p.service} · $${p.price} · ${p.loc}</div>
+      </div>
+      <div style="font-size:20px;color:var(--text3)">›</div>
+    </div>`).join('');
+
+  showSheet(`
+    <div class="sheet-title">Select Profile</div>
+    <div style="max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
+      ${rows}
+    </div>
+    <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Cancel</button>
+  `);
+}
+
+function selectProfile(i){
+  const p = PROFILES[i];
+  if(!p) return;
+  closeSheet();
+  // Apply to the job form - use setTimeout to let the sheet close first
+  setTimeout(()=>{
+    const locEl = document.getElementById('jf-loc');
+    const priceEl = document.getElementById('jf-price');
+    const btn = document.getElementById('prof-select-btn');
+    if(locEl) locEl.value = p.loc;
+    if(priceEl) priceEl.value = p.price;
+    if(btn){ btn.textContent = p.name; btn.style.color = 'var(--text)'; }
+    document.querySelectorAll('#svc-chips .chip').forEach(c=>{
+      c.classList.toggle('on', c.textContent === p.service);
+    });
+  }, 50);
 }
 function openProfileMgr(){
   renderProfileMgr();
@@ -890,12 +924,49 @@ function addNewProfile(){
 }
 
 function applyProfileSelect(){
-  const sel=document.getElementById('prof-select');
-  if(!sel||sel.value==='')return;
-  const p=PROFILES[+sel.value];if(!p)return;
-  document.getElementById('jf-loc').value=p.loc;
-  document.getElementById('jf-price').value=p.price;
-  document.querySelectorAll('#svc-chips .chip').forEach(c=>{c.classList.toggle('on',c.textContent===p.service);});
+  // kept for compatibility
+}
+
+function openProfilePicker(){
+  if(!PROFILES.length){
+    alert('No profiles yet. Tap ⚙ to add one.');
+    return;
+  }
+  // Build a sheet with large tappable rows - easy to tap, no scroll-select conflict
+  const rows = PROFILES.map((p,i)=>`
+    <div onclick="selectProfile(${i})" style="display:flex;align-items:center;justify-content:space-between;padding:14px 4px;border-bottom:0.5px solid var(--border);cursor:pointer;active-bg:var(--bg)">
+      <div>
+        <div style="font-size:15px;font-weight:600;color:var(--text)">${p.name}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">${p.service} · $${p.price} · ${p.loc}</div>
+      </div>
+      <div style="font-size:20px;color:var(--text3)">›</div>
+    </div>`).join('');
+
+  showSheet(`
+    <div class="sheet-title">Select Profile</div>
+    <div style="max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
+      ${rows}
+    </div>
+    <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Cancel</button>
+  `);
+}
+
+function selectProfile(i){
+  const p = PROFILES[i];
+  if(!p) return;
+  closeSheet();
+  // Apply to the job form - use setTimeout to let the sheet close first
+  setTimeout(()=>{
+    const locEl = document.getElementById('jf-loc');
+    const priceEl = document.getElementById('jf-price');
+    const btn = document.getElementById('prof-select-btn');
+    if(locEl) locEl.value = p.loc;
+    if(priceEl) priceEl.value = p.price;
+    if(btn){ btn.textContent = p.name; btn.style.color = 'var(--text)'; }
+    document.querySelectorAll('#svc-chips .chip').forEach(c=>{
+      c.classList.toggle('on', c.textContent === p.service);
+    });
+  }, 50);
 }
 
 function saveJobForm(editId,editKey,defKey){
