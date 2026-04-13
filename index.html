@@ -686,7 +686,7 @@ function jCardHTML(j,isDone,showPaid,isSkip){
           <span class="badge${isDone?' done':''}${isSkip?' skip':''}" style="${badgeSt}">${j.service}</span>
           ${!isSkip&&j.price?`<span class="ptag">$${(+j.price).toFixed(2)}</span>`:''}
           ${et?`<span class="etag">-$${et.toFixed(2)}</span>`:''}
-          ${showPaid&&!isSkip?`<button class="badge ${paid?'paid':'unpaid'}" onclick="togglePaidBtn('${j.id}')" style="border:none;cursor:pointer;font-family:inherit">${paid?'✓ Paid':'Mark Paid'}</button>`:''}
+          ${showPaid&&!isSkip?`<button class="badge ${paid?'paid':'unpaid'}" onclick="togglePaidBtn('${j.id}')" style="border:none;cursor:pointer;font-family:inherit">🫴 ${paid?'Paid':'Pay'}</button>`:''}
         </div>
         ${j.note?`<div class="jnote">${j.note}</div>`:''}
         ${er?`<div class="exp-list">${er}</div>`:''}
@@ -958,6 +958,7 @@ function deleteProfile(i){
   if(!confirm('Remove profile "'+PROFILES[i].name+'"?'))return;
   PROFILES.splice(i,1);
   save();
+  closeSheet();
   renderProfileMgr();
 }
 
@@ -990,6 +991,7 @@ function saveEditProfile(i){
   if(!loc){  alert('Location is required'); return; }
   PROFILES[i] = { name, loc, service: svc, price };
   save();
+  closeSheet();
   closeSheet();
   renderProfileMgr();
 }
@@ -1426,7 +1428,7 @@ function openHistDay(k){
       <div class="jrow">
         <div class="ck on" style="flex-shrink:0">${j.skipped?'—':'✓'}</div>
         <div class="jinfo">
-          <div class="jloc${j.skipped?' skip':''}">${j.loc}${j.skipped?' <span style="font-size:11px">(skipped)</span>':''}</div>
+          <div class="jloc${j.skipped?' skip':''}">${(()=>{const pn=profileNameFor(j);return pn.addr?'<div class="jloc-name">'+pn.name+(j.skipped?' <span style="font-size:11px">(skipped)</span>':'')+' </div><div class="jloc-addr">'+pn.addr+'</div>':pn.name+(j.skipped?' <span style="font-size:11px">(skipped)</span>':'');})()}</div>
           <div class="badges">
             <span class="badge${j.skipped?' skip':' done'}">${j.service}</span>
             ${!j.skipped&&j.price?`<span class="ptag">$${(+j.price).toFixed(2)}</span>`:''}
@@ -1436,7 +1438,7 @@ function openHistDay(k){
         </div>
         <div class="card-btns">
           ${!j.skipped?`<button class="icon-btn" onclick="openAddJobExpHist('${j.id}','${k}')" title="Add expense" style="color:var(--red);font-weight:700">$</button>`:''}
-          ${!j.skipped?`<button class="icon-btn" onclick="PAID['${j.id}']=!PAID['${j.id}'];save();openHistDay('${k}')" title="${p?'Mark unpaid':'Mark paid'}" style="color:${p?'var(--green)':'var(--amber)'};font-weight:700">${p?'✓':'$'}</button>`:''}
+          ${!j.skipped?`<button class="icon-btn" onclick="toggleHistPaid('${j.id}','${k}',this)" title="${p?'Mark unpaid':'Mark paid'}" style="color:${p?'var(--green)':'var(--amber)'};font-size:18px">🫴</button>`:''}
           <button class="icon-btn" onclick="deleteHistJob('${j.id}','${k}')" title="Delete job" style="font-size:14px">🗑</button>
         </div>
       </div>
@@ -1459,7 +1461,7 @@ function openHistDay(k){
         <div class="sum-val g">$${rev.toFixed(2)}</div>
       </div>
     </div>
-    <div class="banner ${out>0?'out':'col'}">
+    <div class="banner ${out>0?'out':'col'}" id="hd-banner">
       ${out>0?`<span style="color:var(--amber);font-weight:600">Outstanding</span><span style="color:var(--amber);font-weight:600">$${out.toFixed(2)}</span>`:`<span style="color:var(--green);font-weight:600">All collected ✓</span><span style="color:var(--green);font-weight:600">$${rev.toFixed(2)}</span>`}
     </div>
     <div style="max-height:40vh;overflow-y:auto">${jobRows}</div>
@@ -1468,6 +1470,24 @@ function openHistDay(k){
       <button class="btn-save" style="background:none;border:0.5px solid var(--blue);color:var(--blue);flex:1" onclick="openCopySheet('${k}','${fmtDate(k)}')">Copy to another day</button>
     </div>
   `);
+}
+
+function toggleHistPaid(jid, k, btn){
+  PAID[jid] = !PAID[jid];
+  save();
+  const p = isPaid(jid);
+  btn.style.color = p ? 'var(--green)' : 'var(--amber)';
+  btn.title = p ? 'Mark unpaid' : 'Mark paid';
+  const rev = tRev(k);
+  const paidAmt = gS(k).filter(j=>isPaid(j.id)&&!j.skipped).reduce((s,j)=>s+(+j.price||0),0);
+  const out = rev - paidAmt;
+  const banner = document.getElementById('hd-banner');
+  if(banner){
+    banner.className = 'banner '+(out>0?'out':'col');
+    banner.innerHTML = out>0
+      ? '<span style="color:var(--amber);font-weight:600">Outstanding</span><span style="color:var(--amber);font-weight:600">$'+out.toFixed(2)+'</span>'
+      : '<span style="color:var(--green);font-weight:600">All collected ✓</span><span style="color:var(--green);font-weight:600">$'+rev.toFixed(2)+'</span>';
+  }
 }
 
 function editHistHours(k){
