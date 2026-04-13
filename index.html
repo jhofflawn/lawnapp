@@ -594,7 +594,11 @@ function monthStats(off){
 }
 function allLocs(){const s=new Set();Object.values(SC).forEach(js=>js.forEach(j=>s.add(j.loc)));return Array.from(s).sort();}
 function profileNameFor(j){
-  // Returns {name, addr} - name is profile display name if found, else loc
+  // Use stored profile name if available
+  if(j.profileName && j.profileName !== j.loc){
+    return{name:j.profileName, addr:j.loc};
+  }
+  // Fall back to matching by loc+service
   const p=PROFILES.find(p=>p.loc===j.loc&&p.service===j.service);
   if(p&&p.name&&p.name!==j.loc)return{name:p.name,addr:j.loc};
   return{name:j.loc,addr:null};
@@ -762,6 +766,7 @@ function saveDayDone(k,btn){
 
 // ─── JOB FORM ─────────────────────────────────────────────────────
 function openJobForm(editId,editKey,defKey){
+  window._selectedProfileName='';
   defKey=defKey||viewKey||TODAY;
   const k=editKey||defKey;
   const ex=editId?gS(k).find(j=>j.id===editId):null;
@@ -880,7 +885,7 @@ function selectProfile(i){
   const p = PROFILES[i];
   if(!p) return;
   closeSheet();
-  // Apply to the job form - use setTimeout to let the sheet close first
+  window._selectedProfileName = p.name; // store chosen profile name
   setTimeout(()=>{
     const locEl = document.getElementById('jf-loc');
     const priceEl = document.getElementById('jf-price');
@@ -1017,7 +1022,7 @@ function selectProfile(i){
   const p = PROFILES[i];
   if(!p) return;
   closeSheet();
-  // Apply to the job form - use setTimeout to let the sheet close first
+  window._selectedProfileName = p.name; // store chosen profile name
   setTimeout(()=>{
     const locEl = document.getElementById('jf-loc');
     const priceEl = document.getElementById('jf-price');
@@ -1043,7 +1048,7 @@ function saveJobForm(editId,editKey,defKey){
     const j=gS(editKey).find(x=>x.id===editId);
     if(j){j.loc=loc;j.service=svc;j.price=price;j.note=note;j.jE=jE;}
   } else {
-    gS(dateVal).push({id:uid(),loc,service:svc,note,price,done:false,skipped:false,jE});
+    gS(dateVal).push({id:uid(),loc,service:svc,note,price,done:false,skipped:false,jE,profileName:window._selectedProfileName||''});window._selectedProfileName='';
   }
   viewKey=dateVal;save();closeSheet();renderSchedule();
 }
