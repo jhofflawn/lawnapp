@@ -723,6 +723,7 @@ function markComplete(jid,k){
   const j=gS(k).find(x=>x.id===jid);
   if(j){j.done=true;save();}
   closeSheet();
+  viewKey=k;
   renderSchedule();
   if(gS(k).filter(x=>!x.done&&!x.skipped).length===0&&gS(k).length>0){
     setTimeout(()=>showDayDone(k),300);
@@ -732,13 +733,17 @@ function markComplete(jid,k){
 function doMoveJob(jid,fromKey,toKey2){
   const jobs=gS(fromKey);const idx=jobs.findIndex(j=>j.id===jid);
   if(idx>-1){const[j]=jobs.splice(idx,1);gS(toKey2).push({...j,done:false,skipped:false});save();}
-  closeSheet();viewKey=TODAY;renderSchedule();
+  closeSheet();
+  renderSchedule();
+  renderUpcoming();
   showToast('Job moved to '+fmtDate(toKey2));
 }
 
 function doSkip(jid,k){
   const j=gS(k).find(x=>x.id===jid);if(j){j.skipped=true;save();}
-  closeSheet();renderSchedule();
+  closeSheet();
+  viewKey=k;
+  renderSchedule();
 }
 
 // ─── DAY DONE ─────────────────────────────────────────────────────
@@ -1050,13 +1055,21 @@ function saveJobForm(editId,editKey,defKey){
   } else {
     gS(dateVal).push({id:uid(),loc,service:svc,note,price,done:false,skipped:false,jE,profileName:window._selectedProfileName||''});window._selectedProfileName='';
   }
-  viewKey=dateVal;save();closeSheet();renderSchedule();
+  viewKey=dateVal;
+  save();
+  closeSheet();
+  renderSchedule();
+  renderUpcoming(); // keep upcoming in sync too
 }
 
 function deleteJob(id,k){
   if(!confirm('Delete this job?'))return;
-  SC[k]=gS(k).filter(j=>j.id!==id);save();
-  closeSheet();renderSchedule();
+  SC[k]=gS(k).filter(j=>j.id!==id);
+  viewKey=k;
+  save();
+  closeSheet();
+  renderSchedule();
+  renderUpcoming();
 }
 
 // ─── ADD JOB EXPENSE (quick) ─────────────────────────────────────
@@ -1116,7 +1129,7 @@ function saveExpForm(k,editId){
   const desc=document.getElementById('exp-desc').value.trim();
   if(editId){const e=gDE(k).find(x=>x.id===editId);if(e){e.cat=cat;e.desc=desc;e.amount=amt;}}
   else gDE(k).push({id:uid(),cat,desc,amount:amt});
-  save();closeSheet();renderSchedule();
+  save();closeSheet();viewKey=viewKey;renderSchedule();
 }
 
 function deleteExp(k,id){
@@ -1277,7 +1290,7 @@ function saveMaintForm(editId){
 function deleteMaint(id){
   if(!confirm('Delete maintenance item?'))return;
   const idx=MAINT.findIndex(m=>m.id===id);if(idx>-1)MAINT.splice(idx,1);
-  save();closeSheet();renderSchedule();
+  save();closeSheet();renderSchedule();renderUpcoming();
 }
 
 // ─── HISTORY ──────────────────────────────────────────────────────
