@@ -316,18 +316,21 @@ function loadLocal(){
 async function jsonbinReq(url, method, body){
   const headers = {
     'Content-Type': 'application/json',
-    'X-Master-Key': jbinApiKey,
-    'X-Bin-Meta': 'false'   // skip metadata wrapper in response
+    'X-Master-Key': jbinApiKey
   };
-  if(method==='POST') headers['X-Bin-Name'] = 'LawnApp';
+  if(method==='POST'){
+    headers['X-Bin-Name'] = 'LawnApp';
+    headers['X-Bin-Private'] = 'true';
+  }
   const opts = { method, headers };
   if(body) opts.body = typeof body==='string' ? body : JSON.stringify(body);
   const r = await fetch(url, opts);
+  const txt = await r.text();
   if(!r.ok){
-    const txt = await r.text();
-    throw new Error('HTTP '+r.status+': '+txt.slice(0,120));
+    throw new Error('HTTP '+r.status+': '+txt.slice(0,200));
   }
-  return r.json();
+  try{ return JSON.parse(txt); }
+  catch(e){ throw new Error('Bad JSON response: '+txt.slice(0,100)); }
 }
 
 async function cloudSave(){
@@ -351,7 +354,7 @@ async function cloudSave(){
   }catch(e){
     console.warn('Cloud save failed:', e.message);
     setSyncIndicator('error');
-    showToast('Sync failed: '+e.message.slice(0,50));
+    alert('Sync failed: '+e.message);
   }
 }
 
@@ -369,6 +372,7 @@ async function cloudLoad(){
     throw new Error('Unexpected response shape');
   }catch(e){
     console.warn('Cloud load failed:', e.message);
+    alert('Load failed: '+e.message);
     return false;
   }
 }
@@ -422,7 +426,6 @@ async function pullFromCloud(){
     showToast('✓ Data synced from cloud');
   } else {
     setSyncIndicator('error');
-    showToast('Sync failed — check your API key');
   }
 }
 
