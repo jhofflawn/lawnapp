@@ -440,6 +440,12 @@ function openSyncSettings(){
     </div>
     <div class="fl" style="margin-top:0">JSONBin Master Key</div>
     <input type="text" id="jbin-key-inp" placeholder="$2a$10$..." value="${jbinApiKey}" autocomplete="off" autocorrect="off" spellcheck="false" style="font-size:13px;font-family:monospace"/>
+    <div class="fl">Bin ID <span style="font-weight:400;color:var(--text3)">(copy this to your other device)</span></div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <input type="text" id="jbin-bin-inp" placeholder="Leave blank to auto-create" value="${jbinBinId}" autocomplete="off" autocorrect="off" spellcheck="false" style="font-size:12px;font-family:monospace;flex:1"/>
+      ${jbinBinId?`<button onclick="navigator.clipboard.writeText('${jbinBinId}').then(()=>showToast('Bin ID copied!'))" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:8px 10px;font-size:12px;cursor:pointer;white-space:nowrap;flex-shrink:0">Copy</button>`:''}
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5">To sync between devices: copy the Bin ID from this device and paste it on your other device along with the same Master Key.</div>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
       <button class="btn-save" onclick="saveSyncKey()">Save & Sync</button>
@@ -512,13 +518,28 @@ async function testSync(){
 function saveSyncKey(){
   const key = (document.getElementById('jbin-key-inp').value||'').trim();
   if(!key){ alert('Please enter your JSONBin Master Key'); return; }
+  const binInp = (document.getElementById('jbin-bin-inp').value||'').trim();
   jbinApiKey = key;
   localStorage.setItem(JBIN_KEY_LS, key);
-  // Reset bin ID so a new bin gets created on first save
-  if(!jbinBinId){ jbinBinId=''; localStorage.removeItem(JBIN_BIN_LS); }
+  if(binInp){
+    // User pasted a bin ID from another device — use it
+    jbinBinId = binInp;
+    localStorage.setItem(JBIN_BIN_LS, jbinBinId);
+  } else if(!jbinBinId){
+    jbinBinId = '';
+    localStorage.removeItem(JBIN_BIN_LS);
+  }
   closeSheet();
-  showToast('Saving to cloud…');
-  cloudSave().then(()=>showToast('✓ Cloud sync enabled!'));
+  showToast('Syncing…');
+  if(jbinBinId){
+    // Pull from existing bin first, then we have the data
+    cloudLoad().then(ok=>{
+      if(ok){ renderSchedule();renderHistory();renderUpcoming();showToast('✓ Data loaded from cloud!'); }
+      else { cloudSave().then(()=>showToast('✓ Cloud sync enabled!')); }
+    });
+  } else {
+    cloudSave().then(()=>showToast('✓ Cloud sync enabled! Copy your Bin ID to other devices.'));
+  }
 }
 
 function clearSyncKey(){
