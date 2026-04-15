@@ -171,6 +171,7 @@ textarea{resize:vertical;min-height:52px}
 .ac-item:last-child{border-bottom:none}
 .ac-item:active{background:var(--bg)}
 .hist-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:0.5px solid var(--border);cursor:pointer}
+.hist-row-today{border-left:3px solid var(--blue);padding-left:9px;background:var(--info-bg);border-radius:8px;margin:2px 0}
 .hist-date{font-size:14px;font-weight:600;color:var(--text)}
 .hist-meta{font-size:11px;color:var(--text2);margin-top:2px}
 .hist-outstanding{font-size:11px;color:var(--amber);margin-top:1px}
@@ -216,6 +217,7 @@ textarea{resize:vertical;min-height:52px}
       <span class="mnav-lbl" id="hist-month-lbl"></span>
       <button class="mnav-btn" onclick="if(histMO<0){histMO++;renderHistory()}">›</button>
     </div>
+    <div id="toggle-bar-wrap" style="flex-shrink:0;padding:0 16px"></div>
     <div id="tiles-wrap" style="flex-shrink:0"></div>
     <div class="search-wrap">
       <input class="search-inp" id="hist-search" placeholder="🔍  Search by location…" oninput="onHistSearch()" autocomplete="off"/>
@@ -709,8 +711,8 @@ function jCardHTML(j,isDone,showPaid,isSkip){
   return`<div class="jcard ${svcClass}${isDone?' done':''}${isSkip?' skipped':''}" draggable="true" data-id="${j.id}" data-key="${viewKey}">
     <div class="jrow">
       <div class="drag-handle" title="Drag to reorder">⠿</div>
-      ${!showPaid?`<button class="ck${isDone?' on':''}" onclick="handleCheck('${j.id}','${viewKey}')" ${isSkip?'disabled':''} style="flex-shrink:0">${isDone?'✓':''}</button>`:'<div class="ck on" style="flex-shrink:0">✓</div>'}
-      <div class="jinfo">
+      ${!showPaid?`<button class="ck${isDone?' on':''}" onclick="event.stopPropagation();handleCheck('${j.id}','${viewKey}')" ${isSkip?'disabled':''} style="flex-shrink:0">${isDone?'✓':''}</button>`:'<div class="ck on" style="flex-shrink:0">✓</div>'}
+      <div class="jinfo" onclick="event.stopPropagation();openJobForm('${j.id}','${viewKey}')" style="cursor:pointer;flex:1">
         <div class="jloc${isSkip?' skip':''}">
           ${(()=>{const pn=profileNameFor(j);return pn.addr?`<div class="jloc-name${isSkip?' skip':''}">${pn.name}${isSkip?' <span style="font-size:11px;color:var(--gray)">(skipped)</span>':''}</div><div class="jloc-addr">${pn.addr}</div>`:`${pn.name}${isSkip?' <span style="font-size:11px;color:var(--gray)">(skipped)</span>':''}`;})()}
         </div>
@@ -718,14 +720,13 @@ function jCardHTML(j,isDone,showPaid,isSkip){
           <span class="badge${isDone?' done':''}${isSkip?' skip':''}" style="${badgeSt}">${j.service}</span>
           ${!isSkip&&j.price?`<span class="ptag">$${(+j.price).toFixed(2)}</span>`:''}
           ${et?`<span class="etag">-$${et.toFixed(2)}</span>`:''}
-          ${showPaid&&!isSkip?`<button class="badge ${paid?'paid':'unpaid'}" onclick="togglePaidBtn('${j.id}')" style="border:none;cursor:pointer;font-family:inherit;font-weight:600">${paid?'✓ Paid':'💰 Pay'}</button>`:''}
+          ${showPaid&&!isSkip?`<button class="badge ${paid?'paid':'unpaid'}" onclick="event.stopPropagation();togglePaidBtn('${j.id}')" style="border:none;cursor:pointer;font-family:inherit;font-weight:600">${paid?'✓ Paid':'💰 Pay'}</button>`:''}
         </div>
         ${j.note?`<div class="jnote">${j.note}</div>`:''}
         ${er?`<div class="exp-list">${er}</div>`:''}
       </div>
       <div class="card-btns">
-        ${!isSkip?`<button class="icon-btn" onclick="openAddJobExp('${j.id}','${viewKey||j._date||TODAY}')" title="Add expense" style="color:var(--red);font-weight:700">$</button>`:''}
-        <button class="icon-btn" onclick="openJobForm('${j.id}','${viewKey||j._date||TODAY}')">✏️</button>
+        ${!isSkip?`<button class="icon-btn" onclick="event.stopPropagation();openAddJobExp('${j.id}','${viewKey||j._date||TODAY}')" title="Add expense" style="color:var(--red);font-weight:700">$</button>`:''}
       </div>
     </div>
   </div>`;
@@ -1471,7 +1472,8 @@ function renderHistory(){
 
   if(histView==='projects'){
     const ps=projectMonthStats(histMO);
-    document.getElementById('tiles-wrap').innerHTML=toggleBar+`
+    document.getElementById('toggle-bar-wrap').innerHTML=toggleBar;
+    document.getElementById('tiles-wrap').innerHTML=`
       <div class="tiles">
         <div class="tile click" onclick="openProjRevTile()"><div class="tile-l">Revenue ›</div><div class="tile-v g">$${ps.rev.toFixed(0)}</div><div class="tile-s">${ps.count} project${ps.count!==1?'s':''}</div></div>
         <div class="tile click" onclick="openProjExpTile()"><div class="tile-l">Expenses ›</div><div class="tile-v r">$${ps.exp.toFixed(0)}</div><div class="tile-s">tap for breakdown</div></div>
@@ -1498,7 +1500,8 @@ function renderHistory(){
       <div class="tile-s">tap to see collected</div>
     </div>`;
 
-  document.getElementById('tiles-wrap').innerHTML=toggleBar+`
+  document.getElementById('toggle-bar-wrap').innerHTML=toggleBar;
+  document.getElementById('tiles-wrap').innerHTML=`
     <div class="tiles">
       <div class="tile click" onclick="openHrsTile()"><div class="tile-l">Hours worked ›</div><div class="tile-v b">${s.hrs.toFixed(1)}<span style="font-size:13px;font-weight:400;color:var(--text3)"> hrs</span></div><div class="tile-s">@ $${laborRate}/hr · ${s.days} days</div></div>
       <div class="tile click" onclick="openRevTile()"><div class="tile-l">Revenue ›</div><div class="tile-v g">$${s.rev.toFixed(0)}</div><div class="tile-s">${totalJobs} jobs</div></div>
@@ -1564,16 +1567,13 @@ function renderHistList(filter){
   const keys=monthKeys(histMO);
   const fk=f?keys.filter(k=>gS(k).some(j=>j.loc.toLowerCase().includes(f))):keys;
   if(!fk.length){body.innerHTML='<div class="empty">No days recorded this month.</div>';return;}
-  const showTodayLine=(histMO===0);
-  let passedToday=false;
   const rows=[];
-  const todayDivider='<div style="display:flex;align-items:center;gap:8px;margin:4px 0"><div style="flex:1;height:2px;background:var(--blue)"></div><span style="font-size:11px;color:var(--blue);font-weight:700;white-space:nowrap;padding:0 4px">TODAY</span><div style="flex:1;height:2px;background:var(--blue)"></div></div>';
   fk.forEach(k=>{
-    if(showTodayLine&&!passedToday&&k>TODAY){passedToday=true;rows.push(todayDivider);}
+    const isToday=(k===TODAY);
     const rev=tRev(k),exp=tExp(k),hrs=gHrs(k),net=rev-exp;
     const paid=gS(k).filter(j=>isPaid(j.id)&&!j.skipped).reduce((s,j)=>s+(+j.price||0),0);
     const out=rev-paid;
-    rows.push('<div class="hist-row" onclick="openHistDay(\'' + k + '\')">' +
+    rows.push('<div class="hist-row' + (isToday?' hist-row-today':'') + '" onclick="openHistDay(\'' + k + '\')">' +
       '<div><div class="hist-date">' + fmtDate(k) + '</div>' +
       '<div class="hist-meta">' + gS(k).length + ' job' + (gS(k).length>1?'s':'') + (hrs?' · '+hrs+' hrs':' · no hours') + '</div>' +
       (out>0?(k>TODAY?'<div style="font-size:11px;color:#5BA4CF;margin-top:1px">$'+out.toFixed(0)+' future</div>':'<div class="hist-outstanding">$'+out.toFixed(0)+' outstanding</div>'):'') +
@@ -1583,7 +1583,6 @@ function renderHistList(filter){
       '<div style="font-size:11px;color:var(--text3)">net $'+net.toFixed(0)+'</div>' +
       '</div></div>');
   });
-  if(showTodayLine&&!passedToday){rows.push(todayDivider);}
   const projRows = getCompletedProjectsForMonth(histMO);
   if(projRows) rows.push(projRows);
   body.innerHTML=rows.join('');
@@ -1969,12 +1968,11 @@ function renderUpcoming(){
     return`<div class="jcard ${j.service.toLowerCase().replace(' ','')}" draggable="true" data-id="${j.id}" data-key="${selUpKey}">
       <div class="jrow">
         <div class="drag-handle" title="Drag to reorder">⠿</div>
-        <div class="jinfo">
+        <div class="jinfo" onclick="event.stopPropagation();openJobForm('${j.id}','${selUpKey}')" style="cursor:pointer;flex:1">
           ${upPn.addr?`<div class="jloc-name">${upPn.name}</div><div class="jloc-addr">${upPn.addr}</div>`:`<div class="jloc">${upPn.name}</div>`}
           <div class="badges"><span class="badge" style="background:${sc[j.service]||'#888'}22;color:${sc[j.service]||'#888'}">${j.service}</span>${j.price?`<span class="ptag">$${(+j.price).toFixed(2)}</span>`:''}</div>
           ${j.note?`<div class="jnote">${j.note}</div>`:''}
         </div>
-        <button class="icon-btn" onclick="openJobForm('${j.id}','${selUpKey}')">✏️</button>
       </div>
     </div>`;
   }).join('');
@@ -2573,12 +2571,33 @@ function openProjectForm(editId){
     <div class="dollar-row"><span>$</span><input type="number" id="pf-price" placeholder="0.00" step="0.01" min="0" value="${ex?ex.quotedPrice:''}"/></div>
     <div class="fl">Notes</div>
     <textarea id="pf-notes" placeholder="Job description, scope, client details…">${ex?ex.notes:''}</textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+      <div class="fl" style="margin:0">Items needed</div>
+      <button type="button" onclick="addProjItemRow()" style="font-size:12px;color:var(--blue);background:none;border:0.5px solid var(--blue);border-radius:6px;padding:2px 8px;cursor:pointer">+ Add</button>
+    </div>
+    <div id="proj-items-list" style="margin-top:6px"></div>
     <div class="btn-row" style="margin-top:16px">
       <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
       <button class="btn-save" onclick="saveProjectForm('${editId||''}')">${ex?'Save Changes':'Create Project'}</button>
     </div>
     ${ex?`<button class="btn-danger" onclick="deleteProject('${editId}')">Delete Project</button>`:''}
-  `);
+  `, ()=>{
+    const list = document.getElementById('proj-items-list');
+    const items = (ex&&ex.items)||[];
+    items.forEach(it=>{
+      const row = document.createElement('div');
+      row.className = 'job-item-row';
+      row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:4px';
+      const imp = it.important?'checked':'';
+      row.innerHTML = [
+        '<input type="text" class="ji-text" placeholder="e.g. Equipment needed" value="'+it.text+'" style="flex:1;font-size:14px;padding:8px;border:0.5px solid var(--border);border-radius:8px"/>',
+        '<label style="display:flex;align-items:center;gap:3px;font-size:12px;white-space:nowrap;cursor:pointer"><input type="checkbox" class="ji-imp" '+imp+'/> ⚠️</label>',
+        '<button type="button" class="pi-del" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0 4px">×</button>'
+      ].join('');
+      row.querySelector('.pi-del').onclick = function(){ this.closest('.job-item-row').remove(); };
+      if(list) list.appendChild(row);
+    });
+  });
 }
 
 function saveProjectForm(editId){
@@ -2589,12 +2608,18 @@ function saveProjectForm(editId){
   const end  = document.getElementById('pf-end').value;
   const price= parseFloat(document.getElementById('pf-price').value)||0;
   const notes= document.getElementById('pf-notes').value.trim();
+  const projItems = Array.from(document.querySelectorAll('#proj-items-list .job-item-row')).map(row=>({
+    id: uid(),
+    text: (row.querySelector('.ji-text')?.value||'').trim(),
+    important: row.querySelector('.ji-imp')?.checked||false,
+    done: false
+  })).filter(it=>it.text);
   if(editId){
     const p = PROJECTS.find(x=>x.id===editId);
-    if(p){ p.name=name;p.category=cat;p.startDate=start;p.endDate=end;p.quotedPrice=price;p.notes=notes; }
+    if(p){ p.name=name;p.category=cat;p.startDate=start;p.endDate=end;p.quotedPrice=price;p.notes=notes;p.items=projItems; }
     save(); closeAllSheets(); openProjectDetail(editId);
   } else {
-    PROJECTS.push({id:uid(),name,category:cat,startDate:start,endDate:end,quotedPrice:price,actualBilled:null,notes,workDays:[],expenses:[],status:'active',invoiced:false});
+    PROJECTS.push({id:uid(),name,category:cat,startDate:start,endDate:end,quotedPrice:price,actualBilled:null,notes,items:projItems,workDays:[],expenses:[],status:'active',invoiced:false});
     save(); closeAllSheets(); renderProjects();
   }
 }
@@ -2655,6 +2680,7 @@ function openProjectDetail(id){
 
     ${p.quotedPrice?`<div style="display:flex;justify-content:space-between;background:var(--bg);border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:13px"><span style="color:var(--text3)">Quoted price</span><span style="font-weight:600;color:var(--text2)">$${(p.quotedPrice||0).toFixed(0)}</span></div>`:''}
     ${p.notes?`<div style="background:var(--bg);border-radius:8px;padding:10px;font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.5">${p.notes}</div>`:''}
+    ${(p.items&&p.items.length)?renderProjItems(p):''}  
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
       <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Work Days · ${totalHrs.toFixed(1)} hrs total</div>
@@ -2729,6 +2755,47 @@ function saveActualBilled(id){
   save();
   closeAllSheets();
   openProjectDetail(id);
+}
+
+function addProjItemRow(){
+  const list = document.getElementById('proj-items-list');
+  if(!list) return;
+  const row = document.createElement('div');
+  row.className = 'job-item-row';
+  row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:4px';
+  row.innerHTML = [
+    '<input type="text" class="ji-text" placeholder="e.g. Equipment needed" style="flex:1;font-size:14px;padding:8px;border:0.5px solid var(--border);border-radius:8px"/>',
+    '<label style="display:flex;align-items:center;gap:3px;font-size:12px;white-space:nowrap;cursor:pointer"><input type="checkbox" class="ji-imp"/> ⚠️</label>',
+    '<button type="button" class="pi-del" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0 4px">×</button>'
+  ].join('');
+  row.querySelector('.pi-del').onclick = function(){ this.closest('.job-item-row').remove(); };
+  list.appendChild(row);
+  row.querySelector('.ji-text').focus();
+}
+
+function renderProjItems(p){
+  const items = p.items||[];
+  if(!items.length) return '';
+  const undone = items.filter(it=>!it.done);
+  const done = items.filter(it=>it.done);
+  const makeRow = (it) => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--border)">
+    <button onclick="toggleProjItem('${p.id}','${it.id}')" style="width:20px;height:20px;border-radius:4px;border:1.5px solid ${it.done?'var(--green)':it.important?'var(--amber)':'var(--blue)'};background:${it.done?'var(--green)':'none'};cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">${it.done?'✓':''}</button>
+    <span style="font-size:13px;flex:1;color:${it.done?'var(--text3)':'var(--text)'};${it.done?'text-decoration:line-through':''}">
+      ${it.important?'⚠️ ':''}${it.text}
+    </span>
+  </div>`;
+  return `<div style="background:var(--bg);border-radius:8px;padding:8px 12px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Items Needed</div>
+    ${undone.map(makeRow).join('')}
+    ${done.length?'<div style="font-size:10px;color:var(--text3);margin-top:6px;margin-bottom:2px">Done</div>'+done.map(makeRow).join(''):''}
+  </div>`;
+}
+
+function toggleProjItem(projId, itemId){
+  const p = PROJECTS.find(x=>x.id===projId);
+  if(!p) return;
+  const item = (p.items||[]).find(it=>it.id===itemId);
+  if(item){ item.done=!item.done; save(); closeAllSheets(); openProjectDetail(projId); }
 }
 
 function removeWorkDay(projId, idx){
@@ -2847,15 +2914,74 @@ function getProjectsForDay(dateKey){
 function renderProjectBanner(dateKey){
   const projs = getProjectsForDay(dateKey);
   if(!projs.length) return '';
-  return projs.map(p=>`
-    <div onclick="openProjectDetail('${p.id}')" style="background:#FFF3E0;border-left:3px solid #E65100;border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
-      <div>
-        <div style="font-size:14px;font-weight:700;color:#E65100">🏗️ ${p.name}</div>
-        ${p.category?`<div style="font-size:12px;color:#BF360C;margin-top:2px">${p.category}</div>`:''}
-        ${p.endDate?`<div style="font-size:11px;color:#8D6E63;margin-top:1px">Until ${fmtDate(p.endDate)}</div>`:''}
+  return projs.map(p=>{
+    const items = p.items||[];
+    const undone = items.filter(it=>!it.done);
+    const done = items.filter(it=>it.done);
+    const allItems = [...undone,...done];
+    const itemRows = allItems.map(it=>{
+      const imp = it.important;
+      const checked = it.done;
+      return `<div style="display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:0.5px solid #EDE0CE">
+        <button onclick="event.stopPropagation();toggleProjItemBanner('${p.id}','${it.id}')" style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${checked?'#4CAF50':imp?'#E65100':'#8D6E63'};background:${checked?'#4CAF50':'none'};cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px">${checked?'✓':''}</button>
+        <span style="font-size:13px;flex:1;color:${checked?'#AAA':'#3E2723'};${checked?'text-decoration:line-through':''}">${imp?'⚠️ ':''} ${it.text}</span>
+      </div>`;
+    }).join('');
+    return `<div style="background:#FFF3E0;border-left:3px solid #E65100;border-radius:8px;padding:10px 12px;margin-bottom:6px">
+      <div onclick="openProjectDetail('${p.id}')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:${allItems.length?'8px':'0'}">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#E65100">🏗️ ${p.name}</div>
+          ${p.category?`<div style="font-size:12px;color:#BF360C;margin-top:2px">${p.category}</div>`:''}
+          ${p.endDate?`<div style="font-size:11px;color:#8D6E63;margin-top:1px">Until ${fmtDate(p.endDate)}</div>`:''}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onclick="event.stopPropagation();openAddProjItemBanner('${p.id}')" style="font-size:11px;color:#E65100;background:none;border:0.5px solid #E65100;border-radius:6px;padding:3px 8px;cursor:pointer">+ Item</button>
+          <span style="font-size:18px;color:#E65100">›</span>
+        </div>
       </div>
-      <div style="font-size:18px;color:#E65100">›</div>
-    </div>`).join('');
+      ${allItems.length?`<div>${itemRows}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function toggleProjItemBanner(projId, itemId){
+  const p = PROJECTS.find(x=>x.id===projId);
+  if(!p) return;
+  const item = (p.items||[]).find(it=>it.id===itemId);
+  if(item){ item.done=!item.done; save(); renderSchedule(); renderUpcoming(); }
+}
+
+function openAddProjItemBanner(projId){
+  const p = PROJECTS.find(x=>x.id===projId);
+  if(!p) return;
+  showSheet(`
+    <div class="sheet-title">Add Item — ${p.name}</div>
+    <div class="fl" style="margin-top:0">Item</div>
+    <input type="text" id="pib-text" placeholder="e.g. Bring extra tarps"/>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:14px;cursor:pointer">
+      <input type="checkbox" id="pib-imp" style="width:18px;height:18px"/> ⚠️ Mark as important
+    </label>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" onclick="saveProjItemBanner('${projId}')">Add Item</button>
+    </div>
+  `);
+  setTimeout(()=>document.getElementById('pib-text')?.focus(),100);
+}
+
+function saveProjItemBanner(projId){
+  const text = (document.getElementById('pib-text')?.value||''). trim();
+  if(!text){ alert('Enter an item'); return; }
+  const imp = document.getElementById('pib-imp')?.checked||false;
+  const p = PROJECTS.find(x=>x.id===projId);
+  if(!p) return;
+  if(!p.items) p.items=[];
+  p.items.push({id:uid(), text, important:imp, done:false});
+  save();
+  closeSheet();
+  renderSchedule();
+  renderUpcoming();
+  showToast('Item added to '+p.name);
 }
 
 
