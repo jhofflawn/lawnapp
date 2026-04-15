@@ -201,6 +201,7 @@ textarea{resize:vertical;min-height:52px}
       <button class="btn-amber" onclick="openMaintLog()">Maintenance</button>
       <div style="flex:1"></div>
       <button id="sync-dot" onclick="jbinApiKey?pullFromCloud():openSyncSettings()" title="Cloud sync" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;line-height:1">☁️</button>
+      <button onclick="openChecklistMgr()" title="Day checklist" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;line-height:1">📝</button>
       <button class="btn-primary" onclick="openJobForm()">+ Add Job</button>
     </div>
     <div class="sum-bar" id="sum-bar"></div>
@@ -315,7 +316,7 @@ let _saveTimer  = null;
 let _syncStatus = 'idle'; // idle | saving | error
 
 function getSnapshot(){
-  return { SC, DE, HW, PAID, MAINT, laborRate, ECATS, MACHINES, PROFILES, SVCS, PROJECTS, nid };
+  return { SC, DE, HW, PAID, MAINT, laborRate, ECATS, MACHINES, PROFILES, SVCS, PROJECTS, CL, nid };
 }
 
 function applySnapshot(d){
@@ -331,6 +332,7 @@ function applySnapshot(d){
   if(d.PROFILES && d.PROFILES.length) PROFILES = d.PROFILES;
   if(d.SVCS     && d.SVCS.length)     SVCS     = d.SVCS;
   if(d.PROJECTS && d.PROJECTS.length) PROJECTS = d.PROJECTS;
+  if(d.CL) Object.assign(CL, d.CL);
   if(d.nid && d.nid > nid) nid = d.nid;
 }
 
@@ -587,6 +589,7 @@ function clearSyncKey(){
 }
 
 const SC = {}; // {dateKey: Job[]}
+const CL = {}; // {dateKey: [{id,text,important,done}]} — day checklist
 const DE = {}; // {dateKey: Expense[]}
 const HW = {}; // {dateKey: number}
 const PAID = {}; // {jobId: bool}
@@ -676,6 +679,7 @@ function renderSchedule(){
     </div>`;});
     html+='<hr class="divider">';
   }
+  html+=renderChecklistBanner(viewKey);
   html+=renderProjectBanner(viewKey);
   if(!active.length&&!done.length&&!skipped.length&&!getProjectsForDay(viewKey).length)html+='<div class="empty">No jobs scheduled.<br>Tap <b>+ Add Job</b> to add one.</div>';
   if(active.length){html+='<div class="slbl">Scheduled</div>';active.forEach(j=>html+=jCardHTML(j,false,false));}
@@ -839,6 +843,11 @@ function openJobForm(editId,editKey,defKey){
     <div class="dollar-row"><span>$</span><input type="number" id="jf-price" placeholder="0.00" step="0.01" min="0" value="${ex&&ex.price?ex.price:''}"/></div>
     <div class="fl">Note (optional)</div>
     <textarea id="jf-note" placeholder="Any special instructions…">${ex?ex.note:''}</textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+      <div class="fl" style="margin:0">Items needed</div>
+      <button type="button" onclick="addJobItemRow()" style="font-size:12px;color:var(--blue);background:none;border:0.5px solid var(--blue);border-radius:6px;padding:2px 8px;cursor:pointer">+ Add</button>
+    </div>
+    <div id="job-items-list" style="margin-top:6px">${(ex&&ex.items||[]).map((it,i)=>`<div class="job-item-row" style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><input type="text" class="ji-text" placeholder="e.g. Extra bags" value="${it.text||''}" style="flex:1;font-size:14px"/><label style="display:flex;align-items:center;gap:3px;font-size:12px;white-space:nowrap;cursor:pointer"><input type="checkbox" class="ji-imp" ${it.important?'checked':''}/> ⚠️</label><button type="button" onclick="this.closest('.job-item-row').remove()" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0 4px">×</button></div>`).join('')}</div>
     <div class="fl" style="margin-top:14px">Job expenses</div>
     <div id="jf-je-list"></div>
     <button class="add-je-btn" onclick="addJeRow()">+ Add job expense</button>
@@ -888,7 +897,25 @@ function openAddServiceSheet(){
       </div>
     </div>
     <button class="btn-outline" style="margin-top:12px" onclick="closeSheet()">Done</button>
-  `);
+  `, ()=>{
+    // Populate items list after render
+    const list=document.getElementById('job-items-list');
+    const items=(ex&&ex.items)||[];
+    items.forEach(it=>{
+      const row=document.createElement('div');
+      row.className='job-item-row';
+      row.style.cssText='display:flex;align-items:center;gap:6px;margin-bottom:4px';
+      const imp=it.important?'checked':'';
+      row.innerHTML=[
+        '<input type="text" class="ji-text" placeholder="e.g. Extra bags" value="'+it.text+'" style="flex:1;font-size:14px;padding:8px;border:0.5px solid var(--border);border-radius:8px"/>',
+        '<label style="display:flex;align-items:center;gap:3px;font-size:12px;white-space:nowrap;cursor:pointer">',
+        '<input type="checkbox" class="ji-imp" '+imp+'/> ⚠️</label>',
+        '<button type="button" class="ji-del" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0 4px">×</button>'
+      ].join('');
+      row.querySelector('.ji-del').onclick=function(){this.closest('.job-item-row').remove();};
+      if(list) list.appendChild(row);
+    });
+  });
 }
 
 function addNewSvc(){
@@ -1179,11 +1206,17 @@ function saveJobForm(editId,editKey,defKey){
   const price=parseFloat(document.getElementById('jf-price').value)||0;
   const note=document.getElementById('jf-note').value.trim();
   const jE=(window._jeItems||[]).filter(e=>+e.amount>0);
+  // Collect items from form
+  const jobItems = Array.from(document.querySelectorAll('#job-items-list .job-item-row')).map(row=>({
+    id: uid(),
+    text: row.querySelector('.ji-text')?.value?.trim()||'',
+    important: row.querySelector('.ji-imp')?.checked||false
+  })).filter(it=>it.text);
   if(editId){
     const j=gS(editKey).find(x=>x.id===editId);
-    if(j){j.loc=loc;j.service=svc;j.price=price;j.note=note;j.jE=jE;}
+    if(j){j.loc=loc;j.service=svc;j.price=price;j.note=note;j.jE=jE;j.items=jobItems;}
   } else {
-    gS(dateVal).push({id:uid(),loc,service:svc,note,price,done:false,skipped:false,jE,profileName:window._selectedProfileName||''});window._selectedProfileName='';
+    gS(dateVal).push({id:uid(),loc,service:svc,note,price,done:false,skipped:false,jE,items:jobItems,profileName:window._selectedProfileName||''});window._selectedProfileName='';
   }
   // Only update viewKey if we're on the schedule screen
   if(curScreen === 'schedule') viewKey = dateVal;
@@ -1477,10 +1510,60 @@ function renderHistory(){
 }
 
 function renderHistList(filter){
+  const body = document.getElementById('hist-body');
+
+  // ── PROJECTS VIEW ────────────────────────────────────────────
+  if(histView === 'projects'){
+    const d=new Date();d.setMonth(d.getMonth()+histMO);
+    const y=d.getFullYear(),m=d.getMonth();
+    const mStart=y+'-'+String(m+1).padStart(2,'0')+'-01';
+    const mEnd=y+'-'+String(m+1).padStart(2,'0')+'-'+String(new Date(y,m+1,0).getDate()).padStart(2,'0');
+    // Projects active or completed during this month
+    const list=PROJECTS.filter(p=>{
+      const s=p.startDate||''; const e=p.endDate||'9999-12-31';
+      return s<=mEnd && e>=mStart;
+    }).sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
+
+    if(!list.length){
+      body.innerHTML='<div class="empty">No projects this month.</div>';
+      return;
+    }
+
+    const rows = list.map(p=>{
+      const exp=(p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
+      const hrs=(p.workDays||[]).reduce((s,d)=>s+(+d.hours||0),0);
+      const billed=p.status==='completed'?(p.actualBilled||p.quotedPrice||0):(p.quotedPrice||0);
+      const profit=billed-exp;
+      const statusColor=p.status==='completed'?'var(--green)':'var(--blue)';
+      const borderColor=p.status==='completed'?'var(--green)':'#E65100';
+      return `<div onclick="openProjectDetail('${p.id}')" style="background:var(--card);border:0.5px solid var(--border);border-left:3px solid ${borderColor};border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div style="flex:1">
+            <div style="font-size:15px;font-weight:700;color:var(--text)">🏗️ ${p.name}</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">${p.category||''}${p.startDate?' · '+fmtDate(p.startDate):''}${p.endDate?' → '+fmtDate(p.endDate):''}</div>
+            <div style="margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">
+              <span style="font-size:12px;font-weight:600;color:${statusColor}">$${billed.toFixed(0)} ${p.status==='completed'?'billed':'quoted'}</span>
+              ${exp?`<span style="font-size:12px;color:var(--red)">-$${exp.toFixed(0)} exp</span>`:''}
+              ${hrs?`<span style="font-size:12px;color:var(--text3)">${hrs.toFixed(1)} hrs</span>`:''}
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;margin-left:10px">
+            <div style="font-size:11px;background:${p.status==='completed'?'var(--green-bg)':'#FFF3E0'};color:${statusColor};font-weight:700;padding:3px 8px;border-radius:10px">${p.status==='completed'?'Done':'Active'}</div>
+            <div style="font-size:13px;font-weight:700;color:${profit>=0?'var(--green)':'var(--red)'};margin-top:6px">$${profit.toFixed(0)} profit</div>
+          </div>
+        </div>
+      </div>`;
+    });
+
+    body.innerHTML = rows.join('');
+    return;
+  }
+
+  // ── JOBS VIEW ────────────────────────────────────────────────
   const f=filter.toLowerCase();
   const keys=monthKeys(histMO);
   const fk=f?keys.filter(k=>gS(k).some(j=>j.loc.toLowerCase().includes(f))):keys;
-  if(!fk.length){document.getElementById('hist-body').innerHTML='<div class="empty">No days recorded this month.</div>';return;}
+  if(!fk.length){body.innerHTML='<div class="empty">No days recorded this month.</div>';return;}
   const showTodayLine=(histMO===0);
   let passedToday=false;
   const rows=[];
@@ -1490,15 +1573,22 @@ function renderHistList(filter){
     const rev=tRev(k),exp=tExp(k),hrs=gHrs(k),net=rev-exp;
     const paid=gS(k).filter(j=>isPaid(j.id)&&!j.skipped).reduce((s,j)=>s+(+j.price||0),0);
     const out=rev-paid;
-    rows.push('<div class="hist-row" onclick="openHistDay(\'' + k + '\')"><div><div class="hist-date">' + fmtDate(k) + '</div><div class="hist-meta">' + gS(k).length + ' job' + (gS(k).length>1?'s':'') + (hrs?' · '+hrs+' hrs':' · no hours') + '</div>' + (out>0?(k>TODAY?'<div style="font-size:11px;color:#5BA4CF;margin-top:1px">$'+out.toFixed(0)+' future</div>':'<div class="hist-outstanding">$'+out.toFixed(0)+' outstanding</div>'):'') + '</div><div style="text-align:right"><div class="hist-rev">$'+rev.toFixed(2)+'</div>'+(exp?'<div style="font-size:11px;color:var(--red)">-$'+exp.toFixed(2)+' exp</div>':'')+'<div style="font-size:11px;color:var(--text3)">net $'+net.toFixed(0)+'</div></div></div>');
+    rows.push('<div class="hist-row" onclick="openHistDay(\'' + k + '\')">' +
+      '<div><div class="hist-date">' + fmtDate(k) + '</div>' +
+      '<div class="hist-meta">' + gS(k).length + ' job' + (gS(k).length>1?'s':'') + (hrs?' · '+hrs+' hrs':' · no hours') + '</div>' +
+      (out>0?(k>TODAY?'<div style="font-size:11px;color:#5BA4CF;margin-top:1px">$'+out.toFixed(0)+' future</div>':'<div class="hist-outstanding">$'+out.toFixed(0)+' outstanding</div>'):'') +
+      '</div><div style="text-align:right">' +
+      '<div class="hist-rev">$'+rev.toFixed(2)+'</div>' +
+      (exp?'<div style="font-size:11px;color:var(--red)">-$'+exp.toFixed(2)+' exp</div>':'') +
+      '<div style="font-size:11px;color:var(--text3)">net $'+net.toFixed(0)+'</div>' +
+      '</div></div>');
   });
   if(showTodayLine&&!passedToday){rows.push(todayDivider);}
-
-  // Append completed projects for this month
   const projRows = getCompletedProjectsForMonth(histMO);
   if(projRows) rows.push(projRows);
-  document.getElementById('hist-body').innerHTML=rows.join('');
+  body.innerHTML=rows.join('');
 }
+
 
 function projectMonthStats(off){
   const d=new Date();d.setMonth(d.getMonth()+off);
@@ -2768,6 +2858,131 @@ function renderProjectBanner(dateKey){
     </div>`).join('');
 }
 
+
+// ─── CHECKLIST ───────────────────────────────────────────────────
+function gCL(k){ if(!CL[k]) CL[k]=[]; return CL[k]; }
+
+function renderChecklistBanner(k){
+  const dayItems = gCL(k);
+  const jobImportant = gS(k).filter(j=>!j.skipped).flatMap(j=>
+    (j.items||[]).filter(it=>it.important).map(it=>({...it, jid:j.id, fromJob:profileNameFor(j).name}))
+  );
+  // Combine - undone first, done at bottom
+  const allUndone = [
+    ...dayItems.filter(it=>!it.done).map(it=>({...it, src:'day'})),
+    ...jobImportant.filter(it=>!it.done).map(it=>({...it, src:'job'}))
+  ];
+  const allDone = [
+    ...dayItems.filter(it=>it.done).map(it=>({...it, src:'day'})),
+    ...jobImportant.filter(it=>it.done).map(it=>({...it, src:'job'}))
+  ];
+  if(!allUndone.length && !allDone.length) return '';
+
+  const makeRow = (it) => {
+    const checked = it.done;
+    const checkBtn = it.src==='day'
+      ? `<button onclick="toggleCLItem('${k}','${it.id}')" style="width:20px;height:20px;border-radius:4px;border:1.5px solid ${checked?'var(--green)':'var(--blue)'};background:${checked?'var(--green)':'none'};cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">${checked?'✓':''}</button>`
+      : `<button onclick="toggleJobItem('${k}','${it.jid}','${it.id}')" style="width:20px;height:20px;border-radius:4px;border:1.5px solid ${checked?'var(--green)':'var(--amber)'};background:${checked?'var(--green)':'none'};cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">${checked?'✓':''}</button>`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid #E8E4DB">
+      ${checkBtn}
+      <span style="font-size:13px;flex:1;color:${checked?'var(--text3)':'var(--text)'};${checked?'text-decoration:line-through':''}">${it.text}</span>
+      ${it.fromJob?`<span style="font-size:11px;color:var(--text3)">${it.fromJob}</span>`:''}
+    </div>`;
+  };
+
+  const undoneRows = allUndone.map(makeRow).join('');
+  const doneRows = allDone.length
+    ? `<div style="font-size:10px;font-weight:700;color:#8B6914;text-transform:uppercase;letter-spacing:.05em;margin-top:6px;margin-bottom:2px">Completed</div>`
+      + allDone.map(makeRow).join('')
+    : '';
+
+  return `<div style="background:#FFFBF0;border:1px solid #F0D080;border-radius:10px;padding:10px 12px;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div style="font-size:11px;font-weight:700;color:#8B6914;text-transform:uppercase;letter-spacing:.06em">📝 Items Needed</div>
+      <button onclick="openChecklistMgr()" style="font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;padding:0">Edit</button>
+    </div>
+    ${undoneRows}${doneRows}
+  </div>`;
+}
+
+
+function toggleCLItem(k, id){
+  const item = gCL(k).find(it=>it.id===id);
+  if(item){ item.done=!item.done; save(); renderSchedule(); }
+}
+
+function toggleJobItem(k, jid, itemId){
+  const j = gS(k).find(x=>x.id===jid);
+  if(!j) return;
+  const item = (j.items||[]).find(it=>it.id===itemId);
+  if(item){ item.done=!item.done; save(); renderSchedule(); }
+}
+
+function openChecklistMgr(){
+  const k = viewKey;
+  const items = gCL(k);
+  const rows = items.map((it,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <span style="font-size:13px;flex:1;color:${it.done?'var(--text3)':'var(--text)'}${it.done?';text-decoration:line-through':''}">${it.text}</span>
+      <button onclick="toggleCLItem('${k}','${it.id}');openChecklistMgr()" style="font-size:12px;color:var(--blue);background:none;border:0.5px solid var(--blue);border-radius:6px;padding:2px 8px;cursor:pointer">${it.done?'Undo':'Done'}</button>
+      <button onclick="removeCLItem('${k}','${it.id}')" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0">×</button>
+    </div>`).join('');
+
+  // Also show important job items (read-only)
+  const jobImportant = gS(k).filter(j=>!j.skipped).flatMap(j=>
+    (j.items||[]).filter(it=>it.important).map(it=>({...it, fromJob:profileNameFor(j).name}))
+  );
+  const jobRows = jobImportant.map(it=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <span style="font-size:13px;flex:1;color:var(--text)">⚠️ ${it.text}</span>
+      <span style="font-size:11px;color:var(--text3)">${it.fromJob}</span>
+    </div>`).join('');
+
+  showSheet(`
+    <div class="sheet-title">📝 Items for ${fmtDate(k)}</div>
+    ${jobImportant.length?`<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">From Jobs</div>${jobRows}<div style="margin-top:12px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Day Checklist</div>`:''}
+    ${rows||'<div style="font-size:13px;color:var(--text3);padding:8px 0">No checklist items yet.</div>'}
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <input type="text" id="cl-new-inp" placeholder="Add item to checklist…" style="flex:1"/>
+      <button class="btn-save" onclick="addCLItem('${k}')" style="flex:none;padding:10px 14px">Add</button>
+    </div>
+    <button class="btn-outline" style="margin-top:8px" onclick="closeSheet()">Done</button>
+  `);
+}
+
+function addCLItem(k){
+  const val = (document.getElementById('cl-new-inp').value||'').trim();
+  if(!val){ alert('Enter an item'); return; }
+  gCL(k).push({id:uid(), text:val, important:false, done:false});
+  save();
+  closeSheet();
+  openChecklistMgr();
+  renderSchedule();
+}
+
+function removeCLItem(k, id){
+  CL[k] = gCL(k).filter(it=>it.id!==id);
+  save();
+  closeSheet();
+  openChecklistMgr();
+  renderSchedule();
+}
+
+function addJobItemRow(){
+  const list = document.getElementById('job-items-list');
+  if(!list) return;
+  const row = document.createElement('div');
+  row.className = 'job-item-row';
+  row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:4px';
+  row.innerHTML = [
+    '<input type="text" class="ji-text" placeholder="e.g. Extra bags" style="flex:1;font-size:14px;padding:8px;border:0.5px solid var(--border);border-radius:8px"/>',
+    '<label style="display:flex;align-items:center;gap:3px;font-size:12px;white-space:nowrap;cursor:pointer"><input type="checkbox" class="ji-imp"/> ⚠️</label>',
+    '<button type="button" class="ji-del" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0 4px">×</button>'
+  ].join('');
+  row.querySelector('.ji-del').onclick = function(){ this.closest('.job-item-row').remove(); };
+  list.appendChild(row);
+  row.querySelector('.ji-text').focus();
+}
 
 // ─── INIT ─────────────────────────────────────────────────────────
 loadAll().then(()=>{
