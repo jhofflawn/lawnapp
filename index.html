@@ -211,7 +211,7 @@ textarea{resize:vertical;min-height:52px}
 
   <!-- HISTORY SCREEN -->
   <div class="screen" id="scr-history">
-    <div class="hdr"><div class="hdr-title">History</div><button onclick="openSyncSettings()" title="Cloud sync settings" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px">⚙</button><button onclick="openYearSheet()" style="background:none;border:0.5px solid var(--amber);color:var(--amber);border-radius:20px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;margin-right:6px">📈 Year</button><button class="btn-primary" onclick="openExportSheet()" style="background:var(--green)">↑ Export</button></div>
+    <div class="hdr"><div class="hdr-title">History</div><button onclick="openSyncSettings()" title="Cloud sync settings" style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px">⚙</button><button onclick="openJobSummarySheet()" style="background:none;border:0.5px solid var(--blue);color:var(--blue);border-radius:20px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;margin-right:6px">📊 Summary</button><button onclick="openYearSheet()" style="background:none;border:0.5px solid var(--amber);color:var(--amber);border-radius:20px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;margin-right:6px">📈 Year</button><button class="btn-primary" onclick="openExportSheet()" style="background:var(--green)">↑ Export</button></div>
     <div class="mnav">
       <button class="mnav-btn" onclick="histMO--;renderHistory()">‹</button>
       <span class="mnav-lbl" id="hist-month-lbl"></span>
@@ -1017,6 +1017,9 @@ function selectProfile(i){
     document.querySelectorAll('#svc-chips .chip').forEach(c=>{
       c.classList.toggle('on', c.textContent === p.service);
     });
+    // Clear items list - items are job-specific, not part of profiles
+    const itemsList = document.getElementById('job-items-list');
+    if(itemsList) itemsList.innerHTML = '';
   }, 50);
 }
 function openProfileMgr(){
@@ -1196,6 +1199,9 @@ function selectProfile(i){
     document.querySelectorAll('#svc-chips .chip').forEach(c=>{
       c.classList.toggle('on', c.textContent === p.service);
     });
+    // Clear items list - items are job-specific, not part of profiles
+    const itemsList = document.getElementById('job-items-list');
+    if(itemsList) itemsList.innerHTML = '';
   }, 50);
 }
 
@@ -1240,30 +1246,30 @@ function deleteJob(id,k){
 
 // ─── ADD JOB EXPENSE (quick) ─────────────────────────────────────
 function openAddJobExp(jid,k){
-  let cat=ECATS[0];
-  const catChips=ECATS.map(c=>`<button class="chip${c===cat?' on':''}" onclick="cat='${c}';document.querySelectorAll('#ajexp-chips .chip').forEach(x=>x.classList.remove('on'));this.classList.add('on')">${c}</button>`).join('');
+  const catChips=ECATS.map((c,i)=>`<button class="chip${i===0?' on':''}" onclick="document.querySelectorAll('#ajexp-chips .chip').forEach(x=>x.classList.remove('on'));this.classList.add('on')">${c}</button>`).join('');
   showSheet(`
     <div class="sheet-title">Add job expense</div>
-    <div class="fl">Category</div>
+    <div class="fl" style="margin-top:0">Category</div>
     <div class="chips" id="ajexp-chips">${catChips}</div>
     <div class="fl">Description (optional)</div>
-    <input type="text" id="ajexp-desc" placeholder="e.g. fuel"/>
+    <input type="text" id="ajexp-desc" placeholder="e.g. fuel, mulch bags"/>
     <div class="fl">Amount</div>
     <div class="dollar-row"><span>$</span><input type="number" id="ajexp-amt" placeholder="0.00" step="0.01" min="0"/></div>
     <div class="btn-row" style="margin-top:16px">
       <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
-      <button class="btn-save" onclick="saveAddJobExp('${jid}','${k}')">Add</button>
+      <button class="btn-save" onclick="saveAddJobExp('${jid}','${k}')">Add Expense</button>
     </div>
   `);
-  window._ajeCat=()=>document.querySelector('#ajexp-chips .chip.on')?.textContent||ECATS[0];
 }
 
 function saveAddJobExp(jid,k){
   const amt=parseFloat(document.getElementById('ajexp-amt').value);
   if(!amt){alert('Enter an amount');return;}
+  const cat=document.querySelector('#ajexp-chips .chip.on')?.textContent||ECATS[0];
+  const desc=(document.getElementById('ajexp-desc').value||'').trim();
   const j=gS(k).find(x=>x.id===jid);
-  if(j){if(!j.jE)j.jE=[];j.jE.push({id:uid(),cat:window._ajeCat(),desc:document.getElementById('ajexp-desc').value.trim(),amount:amt});save();}
-  closeSheet();renderSchedule();
+  if(j){if(!j.jE)j.jE=[];j.jE.push({id:uid(),cat,desc,amount:amt});}
+  save();closeSheet();renderSchedule();
 }
 
 // ─── EXPENSE FORM (day expense) ───────────────────────────────────
@@ -3108,6 +3114,87 @@ function addJobItemRow(){
   row.querySelector('.ji-del').onclick = function(){ this.closest('.job-item-row').remove(); };
   list.appendChild(row);
   row.querySelector('.ji-text').focus();
+}
+
+function openJobSummarySheet(){
+  const keys = monthKeys(histMO);
+  // Group completed jobs by profile/location name
+  const groups = {}; // key = profile name, value = {name, addr, service, dates[], revenue}
+  keys.forEach(k=>{
+    if(k > TODAY) return; // skip future days
+    gS(k).filter(j=>j.done&&!j.skipped).forEach(j=>{
+      const pn = profileNameFor(j);
+      const groupKey = pn.name + '||' + (j.service||'');
+      if(!groups[groupKey]){
+        groups[groupKey] = {
+          name: pn.name,
+          addr: pn.addr,
+          service: j.service,
+          dates: [],
+          revenue: 0
+        };
+      }
+      groups[groupKey].dates.push(k);
+      groups[groupKey].revenue += (+j.price||0);
+    });
+  });
+
+  const entries = Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name));
+
+  if(!entries.length){
+    showSheet(`
+      <div class="sheet-title">📊 ${monthLabel(histMO)} Summary</div>
+      <div class="empty">No completed jobs this month.</div>
+      <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Close</button>
+    `);
+    return;
+  }
+
+  const ML = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const rows = entries.map(e=>{
+    const dateStrs = e.dates.map(d=>{
+      const dt = new Date(d+'T12:00:00');
+      return ML[dt.getMonth()]+' '+dt.getDate();
+    }).join('  ·  ');
+    const count = e.dates.length;
+    return `<div style="padding:10px 0;border-bottom:0.5px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="flex:1">
+          <div style="font-size:15px;font-weight:700;color:var(--text)">${e.name}</div>
+          ${e.addr?`<div style="font-size:12px;color:var(--text3)">${e.addr}</div>`:''}
+          <div style="font-size:12px;color:var(--text3);margin-top:1px">${e.service}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;margin-left:12px">
+          <div style="font-size:16px;font-weight:700;color:var(--blue)">${count}×</div>
+          <div style="font-size:12px;color:var(--green);font-weight:600">$${e.revenue.toFixed(0)}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">${dateStrs}</div>
+    </div>`;
+  }).join('');
+
+  const totalJobs = entries.reduce((s,e)=>s+e.dates.length,0);
+  const totalRev = entries.reduce((s,e)=>s+e.revenue,0);
+
+  showSheet(`
+    <div class="sheet-title">📊 ${monthLabel(histMO)} Summary</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <div style="flex:1;background:var(--info-bg);border-radius:10px;padding:8px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--blue);text-transform:uppercase">Jobs Done</div>
+        <div style="font-size:20px;font-weight:700;color:var(--blue)">${totalJobs}</div>
+      </div>
+      <div style="flex:1;background:var(--green-bg);border-radius:10px;padding:8px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase">Revenue</div>
+        <div style="font-size:20px;font-weight:700;color:var(--green)">$${totalRev.toFixed(0)}</div>
+      </div>
+      <div style="flex:1;background:#F1EFE8;border-radius:10px;padding:8px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase">Clients</div>
+        <div style="font-size:20px;font-weight:700;color:var(--text2)">${entries.length}</div>
+      </div>
+    </div>
+    <div style="max-height:55vh;overflow-y:auto">${rows}</div>
+    <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Close</button>
+  `);
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
