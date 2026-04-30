@@ -665,7 +665,7 @@ function renderSchedule(){
   const rev=tRev(viewKey),exp=tExp(viewKey),net=rev-exp;
   document.getElementById('sum-bar').innerHTML=`
     <div class="sum-pill"><div class="sum-label">Revenue</div><div class="sum-val g">$${rev.toFixed(2)}</div></div>
-    <div class="sum-pill" onclick="openCatMgr()" style="cursor:pointer"><div class="sum-label">Expenses ›</div><div class="sum-val r">$${exp.toFixed(2)}</div></div>
+    <div class="sum-pill" onclick="openExpForm(null,viewKey)" style="cursor:pointer"><div class="sum-label">Expenses ›</div><div class="sum-val r">$${exp.toFixed(2)}</div></div>
     <div class="sum-pill"><div class="sum-label">Net</div><div class="sum-val ${net>=0?'g':'r'}">$${net.toFixed(2)}</div></div>`;
   const jobs=gS(viewKey),active=jobs.filter(j=>!j.done&&!j.skipped),done=jobs.filter(j=>j.done),skipped=jobs.filter(j=>j.skipped);
   const maint=MAINT.filter(m=>m.date===viewKey);
@@ -1542,7 +1542,7 @@ function renderHistList(filter){
       const exp=(p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
       const hrs=(p.workDays||[]).reduce((s,d)=>s+(+d.hours||0),0);
       const billed=p.status==='completed'?(p.actualBilled||p.quotedPrice||0):(p.quotedPrice||0);
-      const profit=billed-exp;
+      const profit=billed-exp-(hrs*laborRate);
       const statusColor=p.status==='completed'?'var(--green)':'var(--blue)';
       const borderColor=p.status==='completed'?'var(--green)':'#E65100';
       return `<div onclick="openProjectDetail('${p.id}')" style="background:var(--card);border:0.5px solid var(--border);border-left:3px solid ${borderColor};border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer">
@@ -1611,7 +1611,7 @@ function projectMonthStats(off){
     exp+=(p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
     hrs+=(p.workDays||[]).reduce((s,d)=>s+(+d.hours||0),0);
   });
-  return{rev,exp,hrs,profit:rev-exp,count:list.length,list};
+  return{rev,exp,hrs,profit:rev-exp-(hrs*laborRate),count:list.length,list};
 }
 
 function openProjRevTile(){
@@ -1661,8 +1661,9 @@ function getCompletedProjectsForMonth(off){
   let html='<div class="slbl" style="margin-top:16px;margin-bottom:8px">COMPLETED PROJECTS</div>';
   list.forEach(p=>{
     const exp=(p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
+    const hrs=(p.workDays||[]).reduce((s,d)=>s+(+d.hours||0),0);
     const billed=(p.actualBilled||p.quotedPrice||0);
-    const profit=billed-exp;
+    const profit=billed-exp-(hrs*laborRate);
     const profitColor=profit>=0?'var(--green)':'var(--red)';
     html+=`<div onclick="openProjectDetail('${p.id}')" style="background:var(--card);border:0.5px solid var(--border);border-left:3px solid var(--green);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">
       <div>
@@ -2526,7 +2527,7 @@ function renderProjects(){
     const totalExp = (p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
     const totalHrs = (p.workDays||[]).reduce((s,d)=>s+(+d.hours||0),0);
     const displayPrice = p.status==='completed' ? (p.actualBilled||p.quotedPrice||0) : (p.quotedPrice||0);
-    const net = displayPrice - totalExp;
+    const net = displayPrice - totalExp - (totalHrs*laborRate);
     const daysLeft = p.endDate ? Math.ceil((new Date(p.endDate+'T12:00:00')-new Date())/(1000*60*60*24)) : null;
     return `<div onclick="openProjectDetail('${p.id}')" style="background:var(--card);border:0.5px solid var(--border);border-left:3px solid var(--blue);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -2641,7 +2642,7 @@ function openProjectDetail(id){
   if(!p) return;
   const totalExp = (p.expenses||[]).reduce((s,e)=>s+(+e.amount||0),0);
   const totalHrs = (p.workDays||[]).reduce((s,d)=>s+(+d.hours||0),0);
-  const profit = (p.actualBilled||p.quotedPrice||0) - totalExp;
+  const profit = (p.actualBilled||p.quotedPrice||0) - totalExp - (totalHrs*laborRate);
 
   const wdRows = (p.workDays||[]).map((d,i)=>`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)">
