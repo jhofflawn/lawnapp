@@ -1072,15 +1072,15 @@ function openProfilePicker(sortMode){
   let sortedProfiles = PROFILES.map((p,i)=>({p,i,days:(()=>{const k=lastCompletedKeyForProfile(p);if(!k)return 99999;const last=new Date(k+'T12:00:00'),now=new Date(TODAY+'T12:00:00');return Math.round((now-last)/(1000*60*60*24));})()}));
   if(sortMode==='alpha') sortedProfiles.sort((a,b)=>a.p.name.localeCompare(b.p.name));
   else {
-    // Under 30 days: sort most recent at bottom (ascending days)
-    // 30+ days or never done: pushed to bottom, sorted among themselves
+    // Under 30 days: at top, most recently done at bottom of that group
+    // 31+ days or never: at bottom, most overdue last
     sortedProfiles.sort((a,b)=>{
-      const aOver = a.days >= 30;
-      const bOver = b.days >= 30;
-      if(aOver && !bOver) return 1;   // a goes to bottom
-      if(!aOver && bOver) return -1;  // b goes to bottom
-      if(aOver && bOver) return b.days-a.days; // both over 30: most overdue last
-      return a.days-b.days; // both under 30: most recent at bottom
+      const aOver = a.days > 30;
+      const bOver = b.days > 30;
+      if(aOver && !bOver) return 1;    // a goes below b
+      if(!aOver && bOver) return -1;   // b goes below a
+      if(!aOver && !bOver) return b.days-a.days; // both under 30: fewest days at top, most days at bottom
+      return b.days-a.days; // both over 30: most overdue at bottom
     });
   }
   const rows = sortedProfiles.map(({p,i})=>`
@@ -1351,15 +1351,15 @@ function openProfilePicker(sortMode){
   let sortedProfiles = PROFILES.map((p,i)=>({p,i,days:(()=>{const k=lastCompletedKeyForProfile(p);if(!k)return 99999;const last=new Date(k+'T12:00:00'),now=new Date(TODAY+'T12:00:00');return Math.round((now-last)/(1000*60*60*24));})()}));
   if(sortMode==='alpha') sortedProfiles.sort((a,b)=>a.p.name.localeCompare(b.p.name));
   else {
-    // Under 30 days: sort most recent at bottom (ascending days)
-    // 30+ days or never done: pushed to bottom, sorted among themselves
+    // Under 30 days: at top, most recently done at bottom of that group
+    // 31+ days or never: at bottom, most overdue last
     sortedProfiles.sort((a,b)=>{
-      const aOver = a.days >= 30;
-      const bOver = b.days >= 30;
-      if(aOver && !bOver) return 1;   // a goes to bottom
-      if(!aOver && bOver) return -1;  // b goes to bottom
-      if(aOver && bOver) return b.days-a.days; // both over 30: most overdue last
-      return a.days-b.days; // both under 30: most recent at bottom
+      const aOver = a.days > 30;
+      const bOver = b.days > 30;
+      if(aOver && !bOver) return 1;    // a goes below b
+      if(!aOver && bOver) return -1;   // b goes below a
+      if(!aOver && !bOver) return b.days-a.days; // both under 30: fewest days at top, most days at bottom
+      return b.days-a.days; // both over 30: most overdue at bottom
     });
   }
   const rows = sortedProfiles.map(({p,i})=>`
