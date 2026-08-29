@@ -1071,7 +1071,18 @@ function openProfilePicker(sortMode){
   // Build rows with touch-safe selection
   let sortedProfiles = PROFILES.map((p,i)=>({p,i,days:(()=>{const k=lastCompletedKeyForProfile(p);if(!k)return 99999;const last=new Date(k+'T12:00:00'),now=new Date(TODAY+'T12:00:00');return Math.round((now-last)/(1000*60*60*24));})()}));
   if(sortMode==='alpha') sortedProfiles.sort((a,b)=>a.p.name.localeCompare(b.p.name));
-  else sortedProfiles.sort((a,b)=>b.days-a.days); // most overdue at top, most recent at bottom
+  else {
+    // Under 30 days: sort most recent at bottom (ascending days)
+    // 30+ days or never done: pushed to bottom, sorted among themselves
+    sortedProfiles.sort((a,b)=>{
+      const aOver = a.days >= 30;
+      const bOver = b.days >= 30;
+      if(aOver && !bOver) return 1;   // a goes to bottom
+      if(!aOver && bOver) return -1;  // b goes to bottom
+      if(aOver && bOver) return b.days-a.days; // both over 30: most overdue last
+      return a.days-b.days; // both under 30: most recent at bottom
+    });
+  }
   const rows = sortedProfiles.map(({p,i})=>`
     <div data-pidx="${i}" class="prof-pick-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px 4px;border-bottom:0.5px solid var(--border);cursor:pointer;-webkit-user-select:none;user-select:none">
       <div>
@@ -1339,7 +1350,18 @@ function openProfilePicker(sortMode){
   // Build rows with touch-safe selection
   let sortedProfiles = PROFILES.map((p,i)=>({p,i,days:(()=>{const k=lastCompletedKeyForProfile(p);if(!k)return 99999;const last=new Date(k+'T12:00:00'),now=new Date(TODAY+'T12:00:00');return Math.round((now-last)/(1000*60*60*24));})()}));
   if(sortMode==='alpha') sortedProfiles.sort((a,b)=>a.p.name.localeCompare(b.p.name));
-  else sortedProfiles.sort((a,b)=>b.days-a.days); // most overdue at top, most recent at bottom
+  else {
+    // Under 30 days: sort most recent at bottom (ascending days)
+    // 30+ days or never done: pushed to bottom, sorted among themselves
+    sortedProfiles.sort((a,b)=>{
+      const aOver = a.days >= 30;
+      const bOver = b.days >= 30;
+      if(aOver && !bOver) return 1;   // a goes to bottom
+      if(!aOver && bOver) return -1;  // b goes to bottom
+      if(aOver && bOver) return b.days-a.days; // both over 30: most overdue last
+      return a.days-b.days; // both under 30: most recent at bottom
+    });
+  }
   const rows = sortedProfiles.map(({p,i})=>`
     <div data-pidx="${i}" class="prof-pick-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px 4px;border-bottom:0.5px solid var(--border);cursor:pointer;-webkit-user-select:none;user-select:none">
       <div>
