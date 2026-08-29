@@ -1043,7 +1043,8 @@ function lastCompletedKeyForProfile(p){
   Object.keys(SC).sort().reverse().forEach(k=>{
     if(lastKey) return;
     const match = SC[k].find(j=>j.done && !j.skipped && (
-      j.profileName===p.name || (j.loc===p.loc && j.service===p.service)
+      j.profileName===p.name ||
+      (!j.profileName && j.loc===p.loc && j.service===p.service)
     ));
     if(match) lastKey = k;
   });
@@ -1322,7 +1323,8 @@ function lastCompletedKeyForProfile(p){
   Object.keys(SC).sort().reverse().forEach(k=>{
     if(lastKey) return;
     const match = SC[k].find(j=>j.done && !j.skipped && (
-      j.profileName===p.name || (j.loc===p.loc && j.service===p.service)
+      j.profileName===p.name ||
+      (!j.profileName && j.loc===p.loc && j.service===p.service)
     ));
     if(match) lastKey = k;
   });
