@@ -318,7 +318,7 @@ let _saveTimer  = null;
 let _syncStatus = 'idle'; // idle | saving | error
 
 function getSnapshot(){
-  return { SC, DE, HW, PAID, MAINT, laborRate, ECATS, MACHINES, PROFILES, SVCS, PROJECTS, CL, nid };
+  return { SC, DE, HW, HW_NB, PAID, MAINT, laborRate, ECATS, MACHINES, PROFILES, SVCS, PROJECTS, CL, nid };
 }
 
 function applySnapshot(d){
@@ -335,6 +335,7 @@ function applySnapshot(d){
   if(d.SVCS     && d.SVCS.length)     SVCS     = d.SVCS;
   if(d.PROJECTS && d.PROJECTS.length) PROJECTS = d.PROJECTS;
   if(d.CL) Object.assign(CL, d.CL);
+  if(d.HW_NB) Object.assign(HW_NB, d.HW_NB);
   if(d.nid && d.nid > nid) nid = d.nid;
 }
 
@@ -592,6 +593,7 @@ function clearSyncKey(){
 
 const SC = {}; // {dateKey: Job[]}
 const CL = {}; // {dateKey: [{id,text,important,done}]} — day checklist
+const HW_NB = {}; // {dateKey: hours} — non-billable hours (tracked only, not in labor calc)
 const DE = {}; // {dateKey: Expense[]}
 const HW = {}; // {dateKey: number}
 const PAID = {}; // {jobId: bool}
@@ -722,6 +724,7 @@ function jCardHTML(j,isDone,showPaid,isSkip){
           ${et?`<span class="etag">-$${et.toFixed(2)}</span>`:''}
           ${showPaid&&!isSkip?`<button class="badge ${paid?'paid':'unpaid'}" onclick="event.stopPropagation();togglePaidBtn('${j.id}')" style="border:none;cursor:pointer;font-family:inherit;font-weight:600">${paid?'✓ Paid':'💰 Pay'}</button>`:''}
         </div>
+        ${(j.addons&&j.addons.length)?`<div style="font-size:11px;color:var(--text3);margin-top:2px">${j.addons.map(a=>a.name+' <span style="color:var(--green)">+$'+a.price.toFixed(2)+'</span>').join(' · ')}</div>`:''}
         ${j.note?`<div class="jnote">${j.note}</div>`:''}
         ${er?`<div class="exp-list">${er}</div>`:''}
       </div>
@@ -792,16 +795,26 @@ function doSkip(jid,k){
 
 // ─── DAY DONE ─────────────────────────────────────────────────────
 function showDayDone(k){
-  const rev=tRev(k),exp=tExp(k),net=rev-exp,cnt=gS(k).filter(j=>!j.skipped).length;
+  const rev=tRev(k),exp=tExp(k),hrs=HW[k]||0,net=rev-exp-(hrs*laborRate),cnt=gS(k).filter(j=>!j.skipped).length;
   const el=document.createElement('div');
   el.className='centered-overlay';
   el.innerHTML=`<div class="centered-card">
     <div style="font-size:46px;margin-bottom:10px">🎉</div>
     <div style="font-size:20px;font-weight:700;margin-bottom:4px">Day Complete!</div>
     <div style="font-size:14px;color:var(--text2);margin-bottom:16px;line-height:1.7">All ${cnt} jobs done<br>Revenue: <b>$${rev.toFixed(2)}</b> · Expenses: <b>$${exp.toFixed(2)}</b><br>Net: <b style="color:${net>=0?'var(--green)':'var(--red)'}">$${net.toFixed(2)}</b></div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-      <label style="font-size:14px;color:var(--text2);white-space:nowrap">Hours worked:</label>
-      <input type="number" id="hrs-inp" placeholder="e.g. 6.5" step="0.5" min="0" style="flex:1"/>
+    <div style="margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Billable hours <span style="font-weight:400;color:var(--text3)">(counts toward labor cost)</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="number" id="hrs-inp" placeholder="e.g. 6.5" step="0.5" min="0" value="${HW[k]||''}" style="flex:1"/>
+        <span style="font-size:13px;color:var(--text3);white-space:nowrap">hrs @ $${laborRate}/hr</span>
+      </div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Non-billable hours <span style="font-weight:400;color:var(--text3)">(tracked only, no labor cost)</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="number" id="hrs-nb-inp" placeholder="e.g. 1.0" step="0.5" min="0" value="${HW_NB[k]||''}" style="flex:1"/>
+        <span style="font-size:13px;color:var(--text3);white-space:nowrap">hrs</span>
+      </div>
     </div>
     <button class="btn-save" onclick="saveDayDone('${k}',this)">Save & Close</button>
   </div>`;
@@ -809,8 +822,12 @@ function showDayDone(k){
 }
 function saveDayDone(k,btn){
   const h=parseFloat(document.getElementById('hrs-inp').value)||0;
-  if(h>0){HW[k]=h;save();}
+  const hNB=parseFloat(document.getElementById('hrs-nb-inp').value)||0;
+  if(h>0){HW[k]=h;}else{delete HW[k];}
+  if(hNB>0){HW_NB[k]=hNB;}else{delete HW_NB[k];}
+  save();
   btn.closest('.centered-overlay').remove();
+  renderHistory();
 }
 
 // ─── JOB FORM ─────────────────────────────────────────────────────
@@ -821,7 +838,12 @@ function openJobForm(editId,editKey,defKey){
   const ex=editId?gS(k).find(j=>j.id===editId):null;
   let jeItems=ex?[...ex.jE||[]]:[];
 
-  const svcChips=SVCS.map(s=>`<button class="chip${(ex?ex.service===s:s==='Lawncare')?' on':''}" onclick="pickSvc(this,'${s}')">${s}</button>`).join('');
+  const defSvc = ex?ex.service:'Lawncare';
+  const svcColorMap = {Lawncare:'#3B6D11',Treework:'#854F0B',Mulching:'#5F5E5A',Landscaping:'#185FA5',Maintenance:'#BA7517'};
+  const svcDropdownOptions = SVCS.map(s=>`<div class="svc-opt${s===defSvc?' svc-opt-sel':''}" data-svc="${s}" onclick="pickSvcDrop(this,'${s}')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-left:4px solid ${svcColorMap[s]||'#888'};margin-bottom:3px;border-radius:0 8px 8px 0;background:${s===defSvc?'var(--bg)':'none'}">
+    <span style="font-size:14px;font-weight:${s===defSvc?'700':'400'};color:${s===defSvc?svcColorMap[s]||'#888':'var(--text2)'};flex:1">${s}</span>
+    ${s===defSvc?'<span style="color:'+( svcColorMap[s]||'#888')+'">✓</span>':''}
+  </div>`).join('');
 
   showSheet(`
     <div class="sheet-title">${ex?'Edit job':'Add job'}</div>
@@ -836,14 +858,29 @@ function openJobForm(editId,editKey,defKey){
     <div class="fl">Location</div>
     <input type="text" id="jf-loc" placeholder="e.g. 123 Main St" value="${ex?ex.loc:''}"/>
     <div class="fl">Service</div>
-    <div style="display:flex;align-items:flex-start;gap:6px">
-      <div class="chips" id="svc-chips" style="flex:1">${svcChips}</div>
-      <button onclick="openAddServiceSheet()" style="flex-shrink:0;width:30px;height:30px;border-radius:50%;background:var(--blue);color:#fff;border:none;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;margin-top:2px">+</button>
+    <div style="position:relative">
+      <button id="svc-dropdown-btn" onclick="toggleSvcDropdown()" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;font-size:15px;font-family:inherit;border-left:4px solid ${svcColorMap[defSvc]||'#888'}">
+        <span id="svc-selected-label" style="font-weight:600;color:${svcColorMap[defSvc]||'var(--text)'}">${defSvc}</span>
+        <span style="color:var(--text3);font-size:12px">▼</span>
+      </button>
+      <input type="hidden" id="svc-hidden" value="${defSvc}"/>
+      <div id="svc-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:0.5px solid var(--border);border-radius:10px;padding:6px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:220px;overflow-y:auto">
+        ${svcDropdownOptions}
+        <div style="border-top:0.5px solid var(--border);margin-top:4px;padding-top:4px">
+          <div onclick="closeSheet();setTimeout(openAddServiceSheet,50)" style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;color:var(--blue);font-size:13px;border-radius:6px">
+            <span style="font-size:18px">+</span> Manage services
+          </div>
+        </div>
+      </div>
     </div>
     <div class="fl">Price</div>
     <div class="dollar-row"><span>$</span><input type="number" id="jf-price" placeholder="0.00" step="0.01" min="0" value="${ex&&ex.price?ex.price:''}"/></div>
     <div class="fl">Note (optional)</div>
     <textarea id="jf-note" placeholder="Any special instructions…">${ex?ex.note:''}</textarea>
+    <div id="jf-addons-wrap" style="display:none;margin-top:12px">
+      <div class="fl" style="margin:0 0 6px">Add-ons</div>
+      <div id="jf-addons"></div>
+    </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
       <div class="fl" style="margin:0">Items needed</div>
       <button type="button" onclick="addJobItemRow()" style="font-size:12px;color:var(--blue);background:none;border:0.5px solid var(--blue);border-radius:6px;padding:2px 8px;cursor:pointer">+ Add</button>
@@ -942,9 +979,78 @@ function removeSvc(idx){
   openAddServiceSheet();
 }
 
+function recalcAddonTotal(){
+  const basePrice = parseFloat(document.getElementById('jf-price')?.dataset.base)||0;
+  const extra = Array.from(document.querySelectorAll('.jf-addon-chk:checked')).reduce((s,c)=>s+(parseFloat(c.dataset.price)||0),0);
+  const priceEl = document.getElementById('jf-price');
+  if(priceEl) priceEl.value = (basePrice + extra).toFixed(2);
+}
+
 function pickSvc(btn,svc){document.querySelectorAll('#svc-chips .chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');}
+
+function toggleSvcDropdown(){
+  const dd = document.getElementById('svc-dropdown');
+  if(!dd) return;
+  dd.style.display = dd.style.display==='none' ? 'block' : 'none';
+}
+
+function pickSvcDrop(el, svc){
+  const svcColorMap = {Lawncare:'#3B6D11',Treework:'#854F0B',Mulching:'#5F5E5A',Landscaping:'#185FA5',Maintenance:'#BA7517'};
+  const color = svcColorMap[svc]||'#888';
+  // Update hidden input
+  const hidden = document.getElementById('svc-hidden');
+  if(hidden) hidden.value = svc;
+  // Update button label and border
+  const btn = document.getElementById('svc-dropdown-btn');
+  if(btn){
+    btn.style.borderLeftColor = color;
+    const lbl = document.getElementById('svc-selected-label');
+    if(lbl){ lbl.textContent = svc; lbl.style.color = color; }
+  }
+  // Update option styles
+  document.querySelectorAll('.svc-opt').forEach(opt=>{
+    const s = opt.dataset.svc;
+    const c = svcColorMap[s]||'#888';
+    const isSel = s===svc;
+    opt.style.background = isSel?'var(--bg)':'none';
+    const span = opt.querySelector('span:first-child');
+    if(span){ span.style.fontWeight = isSel?'700':'400'; span.style.color = isSel?c:'var(--text2)'; }
+    const check = opt.querySelector('span:last-child');
+    if(check) check.textContent = isSel?'✓':'';
+  });
+  // Close dropdown
+  const dd = document.getElementById('svc-dropdown');
+  if(dd) dd.style.display = 'none';
+}
 function applyProfileSelect(){
   // kept for compatibility
+}
+
+function addAddonRow(){
+  const list = document.getElementById('ep-addons');
+  if(!list) return;
+  const row = document.createElement('div');
+  row.className = 'job-item-row';
+  row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:4px';
+  row.innerHTML = '<input type="text" class="ea-name" placeholder="e.g. Weedkiller" style="flex:2;font-size:14px;padding:8px;border:0.5px solid var(--border);border-radius:8px"/><div class="dollar-row" style="flex:1;margin:0"><span>$</span><input type="number" class="ea-price" placeholder="0" step="0.01" min="0" style="font-size:14px"/></div><button type="button" class="ea-del" style="background:none;border:none;color:var(--red);font-size:20px;cursor:pointer;padding:0 4px">&times;</button>';
+  row.querySelector('.ea-del').onclick = function(){ this.closest('.job-item-row').remove(); };
+  list.appendChild(row);
+  row.querySelector('.ea-name').focus();
+}
+
+function lastCompletedDateForProfile(p){
+  // Find the most recent date a job matching this profile was marked done
+  let lastKey = null;
+  Object.keys(SC).sort().reverse().forEach(k=>{
+    if(lastKey) return;
+    const match = SC[k].find(j=>j.done && !j.skipped && (
+      j.profileName===p.name || (j.loc===p.loc && j.service===p.service)
+    ));
+    if(match) lastKey = k;
+  });
+  if(!lastKey) return null;
+  const d = new Date(lastKey+'T12:00:00');
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getDate();
 }
 
 function openProfilePicker(){
@@ -953,12 +1059,14 @@ function openProfilePicker(){
     return;
   }
   // Build a sheet with large tappable rows - easy to tap, no scroll-select conflict
-  // Build rows with touch-safe selection
-  const rows = PROFILES.map((p,i)=>`
+  // Build rows with touch-safe selection - sorted alphabetically
+  const sortedProfiles = PROFILES.map((p,i)=>({p,i})).sort((a,b)=>a.p.name.localeCompare(b.p.name));
+  const rows = sortedProfiles.map(({p,i})=>`
     <div data-pidx="${i}" class="prof-pick-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px 4px;border-bottom:0.5px solid var(--border);cursor:pointer;-webkit-user-select:none;user-select:none">
       <div>
         <div style="font-size:15px;font-weight:600;color:var(--text)">${p.name}</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">${p.service} · $${p.price} · ${p.loc}</div>
+        ${(()=>{const d=lastCompletedDateForProfile(p);return d?`<div style="font-size:11px;color:var(--blue);margin-top:2px">Last done: ${d}</div>`:`<div style="font-size:11px;color:var(--text3);margin-top:2px">Not yet completed</div>`;})()}
       </div>
       <div style="font-size:20px;color:var(--text3);flex-shrink:0;padding-left:10px">›</div>
     </div>`).join('');
@@ -1012,14 +1120,37 @@ function selectProfile(i){
     const priceEl = document.getElementById('jf-price');
     const btn = document.getElementById('prof-select-btn');
     if(locEl) locEl.value = p.loc;
-    if(priceEl) priceEl.value = p.price;
+    if(priceEl){ priceEl.value = p.price; priceEl.dataset.base = p.price; }
     if(btn){ btn.textContent = p.name; btn.style.color = 'var(--text)'; }
     document.querySelectorAll('#svc-chips .chip').forEach(c=>{
       c.classList.toggle('on', c.textContent === p.service);
     });
+    // Update dropdown if present
+    if(document.getElementById('svc-hidden')){
+      document.getElementById('svc-hidden').value = p.service;
+      pickSvcDrop(document.querySelector('.svc-opt[data-svc="'+p.service+'"]')||{dataset:{svc:p.service}}, p.service);
+    }
     // Clear items list - items are job-specific, not part of profiles
     const itemsList = document.getElementById('job-items-list');
     if(itemsList) itemsList.innerHTML = '';
+    // Show profile add-ons as checkboxes
+    const addonWrap = document.getElementById('jf-addons-wrap');
+    const addonList = document.getElementById('jf-addons');
+    if(addonWrap && addonList){
+      const addons = p.addons||[];
+      if(addons.length){
+        addonList.innerHTML = addons.map((a,i)=>`
+          <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);cursor:pointer;font-size:14px">
+            <input type="checkbox" class="jf-addon-chk" data-price="${a.price}" data-name="${a.name}" style="width:18px;height:18px" onchange="recalcAddonTotal()"/>
+            <span style="flex:1">${a.name}</span>
+            <span style="color:var(--green);font-weight:600">+$${a.price.toFixed(2)}</span>
+          </label>`).join('');
+        addonWrap.style.display = '';
+      } else {
+        addonWrap.style.display = 'none';
+        addonList.innerHTML = '';
+      }
+    }
   }, 50);
 }
 function openProfileMgr(){
@@ -1073,6 +1204,12 @@ function deleteProfile(i){
 function editProfile(i){
   const p = PROFILES[i];
   let svcOpts = SVCS.map(s=>`<option value="${s}"${p.service===s?' selected':''}>${s}</option>`).join('');
+  const addonRows = (p.addons||[]).map((a,ai)=>`
+    <div class="job-item-row" style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+      <input type="text" class="ea-name" placeholder="e.g. Weedkiller" value="${a.name}" style="flex:2;font-size:14px;padding:8px;border:0.5px solid var(--border);border-radius:8px"/>
+      <div class="dollar-row" style="flex:1;margin:0"><span>$</span><input type="number" class="ea-price" placeholder="0" step="0.01" min="0" value="${a.price}" style="font-size:14px"/></div>
+      <button type="button" class="ea-del" style="background:none;border:none;color:var(--red);font-size:20px;cursor:pointer;padding:0 4px">&times;</button>
+    </div>`).join('');
   showSheet(`
     <div class="sheet-title">Edit Profile</div>
     <div class="fl" style="margin-top:0">Profile name</div>
@@ -1081,13 +1218,22 @@ function editProfile(i){
     <input type="text" id="ep-loc" value="${p.loc}" placeholder="e.g. 123 Main St"/>
     <div class="fl">Service</div>
     <select id="ep-svc">${svcOpts}</select>
-    <div class="fl">Price</div>
+    <div class="fl">Base price</div>
     <div class="dollar-row"><span>$</span><input type="number" id="ep-price" value="${p.price}" placeholder="0.00" step="0.01" min="0"/></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px">
+      <div class="fl" style="margin:0">Add-ons (optional)</div>
+      <button type="button" onclick="addAddonRow()" style="font-size:12px;color:var(--blue);background:none;border:0.5px solid var(--blue);border-radius:6px;padding:2px 8px;cursor:pointer">+ Add</button>
+    </div>
+    <div id="ep-addons" style="margin-top:6px">${addonRows}</div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
       <button class="btn-save" onclick="saveEditProfile(${i})">Save Changes</button>
     </div>
-  `);
+  `, ()=>{
+    document.querySelectorAll('#ep-addons .ea-del').forEach((btn,ai)=>{
+      btn.onclick = function(){ this.closest('.job-item-row').remove(); };
+    });
+  });
 }
 
 function saveEditProfile(i){
@@ -1097,7 +1243,11 @@ function saveEditProfile(i){
   const price = parseFloat(document.getElementById('ep-price').value)||0;
   if(!name){ alert('Profile name is required'); return; }
   if(!loc){  alert('Location is required'); return; }
-  PROFILES[i] = { name, loc, service: svc, price };
+  const addons = Array.from(document.querySelectorAll('#ep-addons .job-item-row')).map(row=>({
+    name: (row.querySelector('.ea-name')?.value||'').trim(),
+    price: parseFloat(row.querySelector('.ea-price')?.value)||0
+  })).filter(a=>a.name);
+  PROFILES[i] = { name, loc, service: svc, price, addons };
   save();
   closeSheet();
   closeSheet();
@@ -1129,18 +1279,47 @@ function applyProfileSelect(){
   // kept for compatibility
 }
 
+function addAddonRow(){
+  const list = document.getElementById('ep-addons');
+  if(!list) return;
+  const row = document.createElement('div');
+  row.className = 'job-item-row';
+  row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:4px';
+  row.innerHTML = '<input type="text" class="ea-name" placeholder="e.g. Weedkiller" style="flex:2;font-size:14px;padding:8px;border:0.5px solid var(--border);border-radius:8px"/><div class="dollar-row" style="flex:1;margin:0"><span>$</span><input type="number" class="ea-price" placeholder="0" step="0.01" min="0" style="font-size:14px"/></div><button type="button" class="ea-del" style="background:none;border:none;color:var(--red);font-size:20px;cursor:pointer;padding:0 4px">&times;</button>';
+  row.querySelector('.ea-del').onclick = function(){ this.closest('.job-item-row').remove(); };
+  list.appendChild(row);
+  row.querySelector('.ea-name').focus();
+}
+
+function lastCompletedDateForProfile(p){
+  // Find the most recent date a job matching this profile was marked done
+  let lastKey = null;
+  Object.keys(SC).sort().reverse().forEach(k=>{
+    if(lastKey) return;
+    const match = SC[k].find(j=>j.done && !j.skipped && (
+      j.profileName===p.name || (j.loc===p.loc && j.service===p.service)
+    ));
+    if(match) lastKey = k;
+  });
+  if(!lastKey) return null;
+  const d = new Date(lastKey+'T12:00:00');
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getDate();
+}
+
 function openProfilePicker(){
   if(!PROFILES.length){
     alert('No profiles yet. Tap ⚙ to add one.');
     return;
   }
   // Build a sheet with large tappable rows - easy to tap, no scroll-select conflict
-  // Build rows with touch-safe selection
-  const rows = PROFILES.map((p,i)=>`
+  // Build rows with touch-safe selection - sorted alphabetically
+  const sortedProfiles = PROFILES.map((p,i)=>({p,i})).sort((a,b)=>a.p.name.localeCompare(b.p.name));
+  const rows = sortedProfiles.map(({p,i})=>`
     <div data-pidx="${i}" class="prof-pick-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px 4px;border-bottom:0.5px solid var(--border);cursor:pointer;-webkit-user-select:none;user-select:none">
       <div>
         <div style="font-size:15px;font-weight:600;color:var(--text)">${p.name}</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">${p.service} · $${p.price} · ${p.loc}</div>
+        ${(()=>{const d=lastCompletedDateForProfile(p);return d?`<div style="font-size:11px;color:var(--blue);margin-top:2px">Last done: ${d}</div>`:`<div style="font-size:11px;color:var(--text3);margin-top:2px">Not yet completed</div>`;})()}
       </div>
       <div style="font-size:20px;color:var(--text3);flex-shrink:0;padding-left:10px">›</div>
     </div>`).join('');
@@ -1194,14 +1373,37 @@ function selectProfile(i){
     const priceEl = document.getElementById('jf-price');
     const btn = document.getElementById('prof-select-btn');
     if(locEl) locEl.value = p.loc;
-    if(priceEl) priceEl.value = p.price;
+    if(priceEl){ priceEl.value = p.price; priceEl.dataset.base = p.price; }
     if(btn){ btn.textContent = p.name; btn.style.color = 'var(--text)'; }
     document.querySelectorAll('#svc-chips .chip').forEach(c=>{
       c.classList.toggle('on', c.textContent === p.service);
     });
+    // Update dropdown if present
+    if(document.getElementById('svc-hidden')){
+      document.getElementById('svc-hidden').value = p.service;
+      pickSvcDrop(document.querySelector('.svc-opt[data-svc="'+p.service+'"]')||{dataset:{svc:p.service}}, p.service);
+    }
     // Clear items list - items are job-specific, not part of profiles
     const itemsList = document.getElementById('job-items-list');
     if(itemsList) itemsList.innerHTML = '';
+    // Show profile add-ons as checkboxes
+    const addonWrap = document.getElementById('jf-addons-wrap');
+    const addonList = document.getElementById('jf-addons');
+    if(addonWrap && addonList){
+      const addons = p.addons||[];
+      if(addons.length){
+        addonList.innerHTML = addons.map((a,i)=>`
+          <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);cursor:pointer;font-size:14px">
+            <input type="checkbox" class="jf-addon-chk" data-price="${a.price}" data-name="${a.name}" style="width:18px;height:18px" onchange="recalcAddonTotal()"/>
+            <span style="flex:1">${a.name}</span>
+            <span style="color:var(--green);font-weight:600">+$${a.price.toFixed(2)}</span>
+          </label>`).join('');
+        addonWrap.style.display = '';
+      } else {
+        addonWrap.style.display = 'none';
+        addonList.innerHTML = '';
+      }
+    }
   }, 50);
 }
 
@@ -1209,10 +1411,14 @@ function saveJobForm(editId,editKey,defKey){
   const loc=document.getElementById('jf-loc').value.trim();
   if(!loc){alert('Location required');return;}
   const dateVal=document.getElementById('jf-date').value||defKey;
-  const svc=document.querySelector('#svc-chips .chip.on')?.textContent||'Lawncare';
+  const svc=document.getElementById('svc-hidden')?.value||document.querySelector('#svc-chips .chip.on')?.textContent||'Lawncare';
   const price=parseFloat(document.getElementById('jf-price').value)||0;
   const note=document.getElementById('jf-note').value.trim();
   const jE=(window._jeItems||[]).filter(e=>+e.amount>0);
+  // Collect selected add-ons
+  const selectedAddons = Array.from(document.querySelectorAll('.jf-addon-chk:checked')).map(c=>({
+    name: c.dataset.name, price: parseFloat(c.dataset.price)||0
+  }));
   // Collect items from form
   const jobItems = Array.from(document.querySelectorAll('#job-items-list .job-item-row')).map(row=>({
     id: uid(),
@@ -1223,7 +1429,7 @@ function saveJobForm(editId,editKey,defKey){
     const j=gS(editKey).find(x=>x.id===editId);
     if(j){j.loc=loc;j.service=svc;j.price=price;j.note=note;j.jE=jE;j.items=jobItems;}
   } else {
-    gS(dateVal).push({id:uid(),loc,service:svc,note,price,done:false,skipped:false,jE,items:jobItems,profileName:window._selectedProfileName||''});window._selectedProfileName='';
+    gS(dateVal).push({id:uid(),loc,service:svc,note,price,done:false,skipped:false,jE,items:jobItems,addons:selectedAddons,profileName:window._selectedProfileName||''});window._selectedProfileName='';
   }
   // Only update viewKey if we're on the schedule screen
   if(curScreen === 'schedule') viewKey = dateVal;
@@ -1576,7 +1782,7 @@ function renderHistList(filter){
   const rows=[];
   fk.forEach(k=>{
     const isToday=(k===TODAY);
-    const rev=tRev(k),exp=tExp(k),hrs=gHrs(k),net=rev-exp;
+    const rev=tRev(k),exp=tExp(k),hrs=gHrs(k),net=rev-exp-(hrs*laborRate);
     const paid=gS(k).filter(j=>isPaid(j.id)&&!j.skipped).reduce((s,j)=>s+(+j.price||0),0);
     const out=rev-paid;
     rows.push('<div class="hist-row' + (isToday?' hist-row-today':'') + '" onclick="openHistDay(\'' + k + '\')">' +
@@ -1692,7 +1898,12 @@ function onHistSearch(){
   renderHistList(val);
 }
 
-document.addEventListener('click',e=>{if(!e.target.closest('.search-wrap'))document.getElementById('ac-drop').style.display='none';});
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.search-wrap')) document.getElementById('ac-drop').style.display='none';
+  if(!e.target.closest('#svc-dropdown') && !e.target.closest('#svc-dropdown-btn')){
+    const dd=document.getElementById('svc-dropdown'); if(dd) dd.style.display='none';
+  }
+});
 
 function openHistDay(k){
   const rev=tRev(k),exp=tExp(k),hrs=gHrs(k);
@@ -1709,10 +1920,11 @@ function openHistDay(k){
           <div class="jloc${j.skipped?' skip':''}">\n            ${hpn.addr?('<div class="jloc-name">'+hpn.name+(j.skipped?' <span style="font-size:11px">(skipped)</span>':'')+' </div><div class="jloc-addr">'+hpn.addr+'</div>'):(hpn.name+(j.skipped?' <span style="font-size:11px">(skipped)</span>':''))}\n          </div>
           <div class="badges">
             <span class="badge${j.skipped?' skip':' done'}">${j.service}</span>
-            ${!j.skipped&&j.price?`<span class="ptag">$${(+j.price).toFixed(2)}</span>`:''}
+            ${!j.skipped&&j.price?`<span class="ptag" onclick="editHistJobPrice('${j.id}','${k}')" style="cursor:pointer" title="Tap to edit">$${(+j.price).toFixed(2)} ✏️</span>`:''}
             ${et?`<span class="etag">-$${et.toFixed(2)}</span>`:''}
           </div>
           ${j.note?`<div class="jnote">${j.note}</div>`:''}
+          ${(j.addons&&j.addons.length)?`<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${j.addons.map(a=>`<span style="font-size:11px;background:#EEF5E8;color:var(--green);border:0.5px solid var(--green);border-radius:8px;padding:2px 8px;font-weight:600">${a.name} +$${(+a.price).toFixed(2)}</span>`).join('')}</div>`:''}
         </div>
         <div class="card-btns">
           ${!j.skipped?`<button class="icon-btn" onclick="openAddJobExpHist('${j.id}','${k}')" title="Add expense" style="color:var(--red);font-weight:700">$</button>`:''}
@@ -1769,6 +1981,33 @@ function toggleHistPaid(jid, k, btn){
   }
 }
 
+function editHistJobPrice(jid, k){
+  const j = gS(k).find(x=>x.id===jid);
+  if(!j) return;
+  const pn = profileNameFor(j);
+  showSheet(`
+    <div class="sheet-title">Edit Billed Amount</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${pn.name}</div>
+    <div class="fl" style="margin-top:0">Billed amount</div>
+    <div class="dollar-row"><span>$</span><input type="number" id="hjp-amt" value="${j.price||''}" step="0.01" min="0" placeholder="0.00"/></div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" onclick="saveHistJobPrice('${jid}','${k}')">Save</button>
+    </div>
+  `);
+}
+
+function saveHistJobPrice(jid, k){
+  const j = gS(k).find(x=>x.id===jid);
+  if(!j) return;
+  const val = parseFloat(document.getElementById('hjp-amt').value)||0;
+  j.price = val;
+  save();
+  closeAllSheets();
+  openHistDay(k);
+  renderHistory();
+}
+
 function editHistHours(k){
   const cur=gHrs(k);
   const inp=document.createElement('input');
@@ -1815,11 +2054,26 @@ function saveHistJobExp(jid,k){
 // ─── HISTORY TILES ────────────────────────────────────────────────
 function openHrsTile(){
   const s=monthStats(histMO);
-  const dayRows=monthKeys(histMO).filter(k=>HW[k]).map(k=>`<div class="bdr-row"><span>${fmtDate(k)}</span><span style="font-weight:600;color:var(--blue)">${HW[k]} hrs</span></div>`).join('');
+  const keys=monthKeys(histMO);
+  // Calculate total non-billable hours this month
+  const totalNB = keys.reduce((t,k)=>{const d=new Date(k+'T12:00:00');const m=d.getMonth(),y=d.getFullYear();const now=new Date();return(y===now.getFullYear()+(histMO<0?-1:0)||histMO===0)?t+(HW_NB[k]||0):t+(HW_NB[k]||0);},0);
+  const totalNBMonth = keys.reduce((t,k)=>t+(HW_NB[k]||0),0);
+  // Build day rows showing both billable and non-billable
+  const allKeys = keys.filter(k=>HW[k]||HW_NB[k]);
+  const dayRows = allKeys.map(k=>`
+    <div class="bdr-row" style="flex-direction:column;align-items:flex-start;gap:3px">
+      <span style="font-size:13px;color:var(--text2)">${fmtDate(k)}</span>
+      <div style="display:flex;gap:12px">
+        ${HW[k]?`<span style="font-size:13px;font-weight:600;color:var(--blue)">${HW[k]} billable hrs</span>`:''}
+        ${HW_NB[k]?`<span style="font-size:13px;font-weight:600;color:var(--text3)">${HW_NB[k]} non-billable</span>`:''}
+      </div>
+    </div>`).join('');
   showSheet(`
     <div class="sheet-title">Hours & Labor Rate</div>
     <div class="info-box">
-      <div class="info-row"><span style="color:var(--text2)">Total hours</span><b style="color:var(--blue)">${s.hrs.toFixed(1)} hrs</b></div>
+      <div class="info-row"><span style="color:var(--text2)">Billable hours</span><b style="color:var(--blue)">${s.hrs.toFixed(1)} hrs</b></div>
+      <div class="info-row"><span style="color:var(--text2)">Non-billable hours</span><b style="color:var(--text3)">${totalNBMonth.toFixed(1)} hrs</b></div>
+      <div class="info-row"><span style="color:var(--text2)">Total hours</span><b>${(s.hrs+totalNBMonth).toFixed(1)} hrs</b></div>
       <div class="info-row"><span style="color:var(--text2)">Labor cost</span><b style="color:var(--red)">$${s.labor.toFixed(2)}</b></div>
       <div class="info-row"><span style="color:var(--text2)">Hourly rate</span><b>$${laborRate}/hr</b></div>
     </div>
@@ -2578,6 +2832,10 @@ function openProjectForm(editId){
     <div class="dollar-row"><span>$</span><input type="number" id="pf-price" placeholder="0.00" step="0.01" min="0" value="${ex?ex.quotedPrice:''}"/></div>
     <div class="fl">Notes</div>
     <textarea id="pf-notes" placeholder="Job description, scope, client details…">${ex?ex.notes:''}</textarea>
+    <div id="jf-addons-wrap" style="display:none;margin-top:12px">
+      <div class="fl" style="margin:0 0 6px">Add-ons</div>
+      <div id="jf-addons"></div>
+    </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
       <div class="fl" style="margin:0">Items needed</div>
       <button type="button" onclick="addProjItemRow()" style="font-size:12px;color:var(--blue);background:none;border:0.5px solid var(--blue);border-radius:6px;padding:2px 8px;cursor:pointer">+ Add</button>
