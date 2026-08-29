@@ -1038,8 +1038,7 @@ function addAddonRow(){
   row.querySelector('.ea-name').focus();
 }
 
-function lastCompletedDateForProfile(p){
-  // Find the most recent date a job matching this profile was marked done
+function lastCompletedKeyForProfile(p){
   let lastKey = null;
   Object.keys(SC).sort().reverse().forEach(k=>{
     if(lastKey) return;
@@ -1048,32 +1047,48 @@ function lastCompletedDateForProfile(p){
     ));
     if(match) lastKey = k;
   });
-  if(!lastKey) return null;
-  const d = new Date(lastKey+'T12:00:00');
-  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getDate();
+  return lastKey;
 }
 
-function openProfilePicker(){
+function lastCompletedDaysAgo(p){
+  const key = lastCompletedKeyForProfile(p);
+  if(!key) return null;
+  const last = new Date(key+'T12:00:00');
+  const now  = new Date(TODAY+'T12:00:00');
+  const days = Math.round((now - last) / (1000*60*60*24));
+  if(days===0) return 'Done today';
+  if(days===1) return '1 day ago';
+  return days+' days ago';
+}
+
+function openProfilePicker(sortMode){
+  sortMode = sortMode || 'alpha';
   if(!PROFILES.length){
     alert('No profiles yet. Tap ⚙ to add one.');
     return;
   }
   // Build a sheet with large tappable rows - easy to tap, no scroll-select conflict
-  // Build rows with touch-safe selection - sorted alphabetically
-  const sortedProfiles = PROFILES.map((p,i)=>({p,i})).sort((a,b)=>a.p.name.localeCompare(b.p.name));
+  // Build rows with touch-safe selection
+  let sortedProfiles = PROFILES.map((p,i)=>({p,i,days:(()=>{const k=lastCompletedKeyForProfile(p);if(!k)return 99999;const last=new Date(k+'T12:00:00'),now=new Date(TODAY+'T12:00:00');return Math.round((now-last)/(1000*60*60*24));})()}));
+  if(sortMode==='alpha') sortedProfiles.sort((a,b)=>a.p.name.localeCompare(b.p.name));
+  else sortedProfiles.sort((a,b)=>b.days-a.days); // most overdue at top, most recent at bottom
   const rows = sortedProfiles.map(({p,i})=>`
     <div data-pidx="${i}" class="prof-pick-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px 4px;border-bottom:0.5px solid var(--border);cursor:pointer;-webkit-user-select:none;user-select:none">
       <div>
         <div style="font-size:15px;font-weight:600;color:var(--text)">${p.name}</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">${p.service} · $${p.price} · ${p.loc}</div>
-        ${(()=>{const d=lastCompletedDateForProfile(p);return d?`<div style="font-size:11px;color:var(--blue);margin-top:2px">Last done: ${d}</div>`:`<div style="font-size:11px;color:var(--text3);margin-top:2px">Not yet completed</div>`;})()}
+        ${(()=>{const d=lastCompletedDaysAgo(p);return d?`<div style="font-size:11px;color:${parseInt(d)>14||d==='Not yet'?'var(--amber)':'var(--blue)'};margin-top:2px">⏱ ${d}</div>`:`<div style="font-size:11px;color:var(--text3);margin-top:2px">Never completed</div>`;})()}
       </div>
       <div style="font-size:20px;color:var(--text3);flex-shrink:0;padding-left:10px">›</div>
     </div>`).join('');
 
   showSheet(`
     <div class="sheet-title">Select Profile</div>
-    <div id="prof-scroll-list" style="max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
+    <div style="display:flex;background:#F1EFE8;border-radius:10px;padding:3px;margin-bottom:12px">
+      <button onclick="closeSheet();setTimeout(()=>openProfilePicker('alpha'),50)" style="flex:1;padding:6px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:${sortMode==='alpha'?'var(--card)':'transparent'};color:${sortMode==='alpha'?'var(--blue)':'var(--text3)'}">A → Z</button>
+      <button onclick="closeSheet();setTimeout(()=>openProfilePicker('days'),50)" style="flex:1;padding:6px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:${sortMode==='days'?'var(--card)':'transparent'};color:${sortMode==='days'?'var(--blue)':'var(--text3)'}">⏱ Days since</button>
+    </div>
+    <div id="prof-scroll-list" style="max-height:55vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
       ${rows}
     </div>
     <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Cancel</button>
@@ -1291,8 +1306,7 @@ function addAddonRow(){
   row.querySelector('.ea-name').focus();
 }
 
-function lastCompletedDateForProfile(p){
-  // Find the most recent date a job matching this profile was marked done
+function lastCompletedKeyForProfile(p){
   let lastKey = null;
   Object.keys(SC).sort().reverse().forEach(k=>{
     if(lastKey) return;
@@ -1301,32 +1315,48 @@ function lastCompletedDateForProfile(p){
     ));
     if(match) lastKey = k;
   });
-  if(!lastKey) return null;
-  const d = new Date(lastKey+'T12:00:00');
-  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getDate();
+  return lastKey;
 }
 
-function openProfilePicker(){
+function lastCompletedDaysAgo(p){
+  const key = lastCompletedKeyForProfile(p);
+  if(!key) return null;
+  const last = new Date(key+'T12:00:00');
+  const now  = new Date(TODAY+'T12:00:00');
+  const days = Math.round((now - last) / (1000*60*60*24));
+  if(days===0) return 'Done today';
+  if(days===1) return '1 day ago';
+  return days+' days ago';
+}
+
+function openProfilePicker(sortMode){
+  sortMode = sortMode || 'alpha';
   if(!PROFILES.length){
     alert('No profiles yet. Tap ⚙ to add one.');
     return;
   }
   // Build a sheet with large tappable rows - easy to tap, no scroll-select conflict
-  // Build rows with touch-safe selection - sorted alphabetically
-  const sortedProfiles = PROFILES.map((p,i)=>({p,i})).sort((a,b)=>a.p.name.localeCompare(b.p.name));
+  // Build rows with touch-safe selection
+  let sortedProfiles = PROFILES.map((p,i)=>({p,i,days:(()=>{const k=lastCompletedKeyForProfile(p);if(!k)return 99999;const last=new Date(k+'T12:00:00'),now=new Date(TODAY+'T12:00:00');return Math.round((now-last)/(1000*60*60*24));})()}));
+  if(sortMode==='alpha') sortedProfiles.sort((a,b)=>a.p.name.localeCompare(b.p.name));
+  else sortedProfiles.sort((a,b)=>b.days-a.days); // most overdue at top, most recent at bottom
   const rows = sortedProfiles.map(({p,i})=>`
     <div data-pidx="${i}" class="prof-pick-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px 4px;border-bottom:0.5px solid var(--border);cursor:pointer;-webkit-user-select:none;user-select:none">
       <div>
         <div style="font-size:15px;font-weight:600;color:var(--text)">${p.name}</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">${p.service} · $${p.price} · ${p.loc}</div>
-        ${(()=>{const d=lastCompletedDateForProfile(p);return d?`<div style="font-size:11px;color:var(--blue);margin-top:2px">Last done: ${d}</div>`:`<div style="font-size:11px;color:var(--text3);margin-top:2px">Not yet completed</div>`;})()}
+        ${(()=>{const d=lastCompletedDaysAgo(p);return d?`<div style="font-size:11px;color:${parseInt(d)>14||d==='Not yet'?'var(--amber)':'var(--blue)'};margin-top:2px">⏱ ${d}</div>`:`<div style="font-size:11px;color:var(--text3);margin-top:2px">Never completed</div>`;})()}
       </div>
       <div style="font-size:20px;color:var(--text3);flex-shrink:0;padding-left:10px">›</div>
     </div>`).join('');
 
   showSheet(`
     <div class="sheet-title">Select Profile</div>
-    <div id="prof-scroll-list" style="max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
+    <div style="display:flex;background:#F1EFE8;border-radius:10px;padding:3px;margin-bottom:12px">
+      <button onclick="closeSheet();setTimeout(()=>openProfilePicker('alpha'),50)" style="flex:1;padding:6px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:${sortMode==='alpha'?'var(--card)':'transparent'};color:${sortMode==='alpha'?'var(--blue)':'var(--text3)'}">A → Z</button>
+      <button onclick="closeSheet();setTimeout(()=>openProfilePicker('days'),50)" style="flex:1;padding:6px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:${sortMode==='days'?'var(--card)':'transparent'};color:${sortMode==='days'?'var(--blue)':'var(--text3)'}">⏱ Days since</button>
+    </div>
+    <div id="prof-scroll-list" style="max-height:55vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
       ${rows}
     </div>
     <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Cancel</button>
