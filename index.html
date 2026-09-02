@@ -318,7 +318,7 @@ let _saveTimer  = null;
 let _syncStatus = 'idle'; // idle | saving | error
 
 function getSnapshot(){
-  return { SC, DE, HW, HW_NB, PAID, MAINT, laborRate, ECATS, MACHINES, PROFILES, SVCS, PROJECTS, CL, nid };
+  return { SC, DE, HW, HW_NB, PAID, MAINT, laborRate, ECATS, MACHINES, PROFILES, SVCS, PROJECTS, CL, EMPLOYEES, nid };
 }
 
 function applySnapshot(d){
@@ -336,6 +336,7 @@ function applySnapshot(d){
   if(d.PROJECTS && d.PROJECTS.length) PROJECTS = d.PROJECTS;
   if(d.CL) Object.assign(CL, d.CL);
   if(d.HW_NB) Object.assign(HW_NB, d.HW_NB);
+  if(d.EMPLOYEES && d.EMPLOYEES.length) EMPLOYEES = d.EMPLOYEES;
   if(d.nid && d.nid > nid) nid = d.nid;
 }
 
@@ -594,6 +595,7 @@ function clearSyncKey(){
 const SC = {}; // {dateKey: Job[]}
 const CL = {}; // {dateKey: [{id,text,important,done}]} — day checklist
 const HW_NB = {}; // {dateKey: hours} — non-billable hours (tracked only, not in labor calc)
+let EMPLOYEES = []; // [{id, name, rate, payments:[{date,hours,amount,note}]}]
 const DE = {}; // {dateKey: Expense[]}
 const HW = {}; // {dateKey: number}
 const PAID = {}; // {jobId: bool}
@@ -1089,7 +1091,7 @@ function openProfilePicker(sortMode){
       <div>
         <div style="font-size:15px;font-weight:600;color:var(--text)">${p.name}</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">${p.service} · $${p.price} · ${p.loc}</div>
-        ${(()=>{const d=lastCompletedDaysAgo(p);return d?`<div style="font-size:11px;color:${parseInt(d)>14||d==='Not yet'?'var(--amber)':'var(--blue)'};margin-top:2px">⏱ ${d}</div>`:`<div style="font-size:11px;color:var(--text3);margin-top:2px">Never completed</div>`;})()}
+        ${(()=>{const k=lastCompletedKeyForProfile(p);const d=lastCompletedDaysAgo(p);return d?`<div style="font-size:11px;color:${parseInt(d)>14||d==='Not yet'?'var(--amber)':'var(--blue)'};margin-top:2px">⏱ ${d}${k?' ('+k+')':''}</div>`:`<div style="font-size:11px;color:var(--text3);margin-top:2px">Never completed</div>`;})()}
       </div>
       <div style="font-size:20px;color:var(--text3);flex-shrink:0;padding-left:10px">›</div>
     </div>`).join('');
@@ -1369,7 +1371,7 @@ function openProfilePicker(sortMode){
       <div>
         <div style="font-size:15px;font-weight:600;color:var(--text)">${p.name}</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">${p.service} · $${p.price} · ${p.loc}</div>
-        ${(()=>{const d=lastCompletedDaysAgo(p);return d?`<div style="font-size:11px;color:${parseInt(d)>14||d==='Not yet'?'var(--amber)':'var(--blue)'};margin-top:2px">⏱ ${d}</div>`:`<div style="font-size:11px;color:var(--text3);margin-top:2px">Never completed</div>`;})()}
+        ${(()=>{const k=lastCompletedKeyForProfile(p);const d=lastCompletedDaysAgo(p);return d?`<div style="font-size:11px;color:${parseInt(d)>14||d==='Not yet'?'var(--amber)':'var(--blue)'};margin-top:2px">⏱ ${d}${k?' ('+k+')':''}</div>`:`<div style="font-size:11px;color:var(--text3);margin-top:2px">Never completed</div>`;})()}
       </div>
       <div style="font-size:20px;color:var(--text3);flex-shrink:0;padding-left:10px">›</div>
     </div>`).join('');
@@ -1981,8 +1983,11 @@ function openHistDay(k){
           ${(j.addons&&j.addons.length)?`<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${j.addons.map(a=>`<span style="font-size:11px;background:#EEF5E8;color:var(--green);border:0.5px solid var(--green);border-radius:8px;padding:2px 8px;font-weight:600">${a.name} +$${(+a.price).toFixed(2)}</span>`).join('')}</div>`:''}
         </div>
         <div class="card-btns">
-          ${!j.skipped?`<button class="icon-btn" onclick="openAddJobExpHist('${j.id}','${k}')" title="Add expense" style="color:var(--red);font-weight:700">$</button>`:''}
-          ${!j.skipped?`<button class="icon-btn" onclick="toggleHistPaid('${j.id}','${k}',this)" title="${p?'Mark unpaid':'Mark paid'}" style="color:${p?'var(--green)':'var(--amber)'};font-size:18px;font-weight:700">${p?'✓':'💰'}</button>`:''}
+          <div style="display:flex;align-items:center;gap:6px">
+            ${!j.skipped?`<button class="icon-btn" onclick="openAddJobExpHist('${j.id}','${k}')" title="Add expense" style="color:var(--red);font-weight:700;font-size:13px">$</button>`:''}
+            ${!j.skipped?`<button class="icon-btn" onclick="editHistJobPrice('${j.id}','${k}')" title="Edit billed amount" style="color:var(--blue);font-size:13px;font-weight:700">✏️</button>`:''}
+            ${!j.skipped?`<button onclick="toggleHistPaid('${j.id}','${k}',this)" title="${p?'Mark unpaid':'Mark paid'}" style="padding:0 14px;height:34px;border-radius:10px;border:none;cursor:pointer;font-size:15px;font-weight:700;background:${p?'var(--green-bg)':'var(--amber-bg)'};color:${p?'var(--green)':'var(--amber)'}">${p?'✓ Paid':'💰 Pay'}</button>`:''}
+          </div>
           <button class="icon-btn" onclick="deleteHistJob('${j.id}','${k}')" title="Delete job" style="font-size:14px">🗑</button>
         </div>
       </div>
@@ -2021,7 +2026,9 @@ function toggleHistPaid(jid, k, btn){
   save();
   const p = isPaid(jid);
   btn.style.color = p ? 'var(--green)' : 'var(--amber)';
-  btn.textContent = p ? '✓' : '💰';
+  btn.textContent = p ? '✓ Paid' : '💰 Pay';
+  btn.style.background = p ? 'var(--green-bg)' : 'var(--amber-bg)';
+  btn.style.color = p ? 'var(--green)' : 'var(--amber)';
   btn.title = p ? 'Mark unpaid' : 'Mark paid';
   const rev = tRev(k);
   const paidAmt = gS(k).filter(j=>isPaid(j.id)&&!j.skipped).reduce((s,j)=>s+(+j.price||0),0);
@@ -2109,10 +2116,7 @@ function saveHistJobExp(jid,k){
 function openHrsTile(){
   const s=monthStats(histMO);
   const keys=monthKeys(histMO);
-  // Calculate total non-billable hours this month
-  const totalNB = keys.reduce((t,k)=>{const d=new Date(k+'T12:00:00');const m=d.getMonth(),y=d.getFullYear();const now=new Date();return(y===now.getFullYear()+(histMO<0?-1:0)||histMO===0)?t+(HW_NB[k]||0):t+(HW_NB[k]||0);},0);
   const totalNBMonth = keys.reduce((t,k)=>t+(HW_NB[k]||0),0);
-  // Build day rows showing both billable and non-billable
   const allKeys = keys.filter(k=>HW[k]||HW_NB[k]);
   const dayRows = allKeys.map(k=>`
     <div class="bdr-row" style="flex-direction:column;align-items:flex-start;gap:3px">
@@ -2122,18 +2126,34 @@ function openHrsTile(){
         ${HW_NB[k]?`<span style="font-size:13px;font-weight:600;color:var(--text3)">${HW_NB[k]} non-billable</span>`:''}
       </div>
     </div>`).join('');
+
+  // Employee tiles
+  const empTiles = EMPLOYEES.map(e=>`
+    <div onclick="openEmployeeDetail('${e.id}')" style="background:var(--info-bg);border-radius:12px;padding:10px;text-align:center;cursor:pointer;border:0.5px solid var(--blue)">
+      <div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.04em">${e.name}</div>
+      <div style="font-size:16px;font-weight:700;color:var(--blue);margin-top:2px">$${e.rate}/hr</div>
+    </div>`).join('');
+
   showSheet(`
-    <div class="sheet-title">Hours & Labor Rate</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div class="sheet-title" style="margin-bottom:0">Hours & Labor</div>
+      <button onclick="openRateSettings()" style="background:none;border:0.5px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--text2);cursor:pointer">⚙ Rate</button>
+    </div>
     <div class="info-box">
       <div class="info-row"><span style="color:var(--text2)">Billable hours</span><b style="color:var(--blue)">${s.hrs.toFixed(1)} hrs</b></div>
       <div class="info-row"><span style="color:var(--text2)">Non-billable hours</span><b style="color:var(--text3)">${totalNBMonth.toFixed(1)} hrs</b></div>
       <div class="info-row"><span style="color:var(--text2)">Total hours</span><b>${(s.hrs+totalNBMonth).toFixed(1)} hrs</b></div>
       <div class="info-row"><span style="color:var(--text2)">Labor cost</span><b style="color:var(--red)">$${s.labor.toFixed(2)}</b></div>
-      <div class="info-row"><span style="color:var(--text2)">Hourly rate</span><b>$${laborRate}/hr</b></div>
+      <div class="info-row"><span style="color:var(--text2)">My rate</span><b>$${laborRate}/hr</b></div>
     </div>
-    <div class="fl">Change hourly rate</div>
-    <div class="dollar-row"><span>$</span><input type="number" id="rate-inp" value="${laborRate}" step="1" min="1"/></div>
-    <button class="btn-save" style="width:100%;margin-top:10px" onclick="updateRate()">Update Rate</button>
+    <div class="fl">Employees</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-bottom:4px">
+      ${empTiles}
+      <div onclick="openAddEmployee()" style="background:var(--bg);border-radius:12px;padding:10px;text-align:center;cursor:pointer;border:0.5px dashed var(--border)">
+        <div style="font-size:22px;color:var(--text3)">+</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">Add Employee</div>
+      </div>
+    </div>
     <div style="border-top:0.5px solid var(--border);margin-top:14px;padding-top:10px">
       <div class="slbl">Hours by day</div>
       ${dayRows||'<div style="text-align:center;padding:12px;color:var(--text3)">No hours logged.</div>'}
@@ -2142,12 +2162,208 @@ function openHrsTile(){
   `);
 }
 
+function openRateSettings(){
+  showSheet(`
+    <div class="sheet-title">My Hourly Rate</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">This rate is used to calculate labor cost in all profit calculations.</div>
+    <div class="fl" style="margin-top:0">Hourly rate</div>
+    <div class="dollar-row"><span>$</span><input type="number" id="rate-inp" value="${laborRate}" step="1" min="1"/></div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" onclick="updateRate()">Update Rate</button>
+    </div>
+  `);
+}
+
 function updateRate(){
   const nr=parseFloat(document.getElementById('rate-inp').value);
   if(!nr)return;
-  if(confirm(`Change rate from $${laborRate}/hr to $${nr}/hr? This affects all profit calculations.`)){
-    laborRate=nr;save();closeSheet();renderHistory();showToast('Rate updated to $'+laborRate+'/hr');
+  if(confirm('Change rate from $'+laborRate+'/hr to $'+nr+'/hr? This affects all profit calculations.')){
+    laborRate=nr;save();closeAllSheets();openHrsTile();showToast('Rate updated to $'+laborRate+'/hr');
   }
+}
+
+function openAddEmployee(){
+  showSheet(`
+    <div class="sheet-title">Add Employee</div>
+    <div class="fl" style="margin-top:0">Name</div>
+    <input type="text" id="emp-name-inp" placeholder="e.g. Jake"/>
+    <div class="fl">Hourly rate</div>
+    <div class="dollar-row"><span>$</span><input type="number" id="emp-rate-inp" placeholder="0" step="0.50" min="0"/></div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" onclick="saveEmployee()">Add Employee</button>
+    </div>
+  `);
+}
+
+function saveEmployee(){
+  const name = (document.getElementById('emp-name-inp')?.value||'').trim();
+  const rate = parseFloat(document.getElementById('emp-rate-inp')?.value)||0;
+  if(!name){ alert('Enter employee name'); return; }
+  EMPLOYEES.push({id:uid(), name, rate, payments:[]});
+  save();
+  closeAllSheets();
+  openHrsTile();
+  showToast(name+' added');
+}
+
+function openEmployeeDetail(eid){
+  const e = EMPLOYEES.find(x=>x.id===eid);
+  if(!e) return;
+  const year = new Date().getFullYear();
+  const totalPay = (e.payments||[]).filter(p=>p.date&&p.date.startsWith(year)).reduce((s,p)=>s+(+p.amount||0),0);
+  const totalHrs = (e.payments||[]).filter(p=>p.date&&p.date.startsWith(year)).reduce((s,p)=>s+(+p.hours||0),0);
+  const payRows = [...(e.payments||[])].reverse().map((p,i)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <div>
+        <div style="font-size:13px;font-weight:600">${p.date?fmtDate(p.date):''}</div>
+        <div style="font-size:12px;color:var(--text3)">${p.hours?p.hours+' hrs · ':''} ${p.note||''}</div>
+      </div>
+      <div style="font-size:15px;font-weight:700;color:var(--green)">$${(+p.amount).toFixed(2)}</div>
+    </div>`).join('');
+
+  showSheet(`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="sheet-title" style="margin-bottom:0">${e.name}</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="openEditEmployee('${eid}')" style="background:none;border:0.5px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--text2);cursor:pointer">Edit</button>
+        <button onclick="deleteEmployee('${eid}')" style="background:none;border:0.5px solid var(--red);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--red);cursor:pointer">Remove</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+      <div style="background:var(--green-bg);border-radius:10px;padding:8px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase">YTD Pay</div>
+        <div style="font-size:18px;font-weight:700;color:var(--green)">$${totalPay.toFixed(0)}</div>
+      </div>
+      <div style="background:var(--info-bg);border-radius:10px;padding:8px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--blue);text-transform:uppercase">YTD Hours</div>
+        <div style="font-size:18px;font-weight:700;color:var(--blue)">${totalHrs.toFixed(1)}</div>
+      </div>
+      <div style="background:#F1EFE8;border-radius:10px;padding:8px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase">Rate</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text2)">$${e.rate}/hr</div>
+      </div>
+    </div>
+    <button class="btn-save" style="width:100%;margin-bottom:14px" onclick="openLogPayment('${eid}')">+ Log Payment</button>
+    <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Payment History</div>
+    <div style="max-height:40vh;overflow-y:auto">
+      ${payRows||'<div style="text-align:center;padding:16px;color:var(--text3)">No payments logged yet.</div>'}
+    </div>
+    <button class="btn-outline" style="margin-top:14px" onclick="closeSheet()">Close</button>
+  `);
+}
+
+function openLogPayment(eid){
+  const e = EMPLOYEES.find(x=>x.id===eid);
+  if(!e) return;
+  // Simple monthly payment entry — just amount and month
+  const now = new Date();
+  const ML = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const monthOpts = ML.map((m,i)=>`<option value="${now.getFullYear()+'-'+String(i+1).padStart(2,'0')}" ${i===now.getMonth()?'selected':''}>${m} ${now.getFullYear()}</option>`).join('');
+  showSheet(`
+    <div class="sheet-title">Log Payment — ${e.name}</div>
+    <div class="fl" style="margin-top:0">Month</div>
+    <select id="pay-month" style="width:100%;padding:10px 12px;border:0.5px solid var(--border);border-radius:10px;font-size:15px;background:var(--bg);color:var(--text)">${monthOpts}</select>
+    <div class="fl">Amount paid</div>
+    <div class="dollar-row"><span>$</span><input type="number" id="pay-amt" placeholder="0.00" step="0.01" min="0"/></div>
+    <div style="margin-top:14px">
+      <button onclick="openLogPaymentDetailed('${eid}')" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;padding:0;text-decoration:underline">+ Add hours & notes</button>
+    </div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" onclick="savePaymentSimple('${eid}')">Save Payment</button>
+    </div>
+  `);
+}
+
+function openLogPaymentDetailed(eid){
+  const e = EMPLOYEES.find(x=>x.id===eid);
+  if(!e) return;
+  // Get current values from simple form before switching
+  const month = document.getElementById('pay-month')?.value||TODAY.slice(0,7);
+  const amt = document.getElementById('pay-amt')?.value||'';
+  showSheet(`
+    <div class="sheet-title">Log Payment — ${e.name}</div>
+    <div class="fl" style="margin-top:0">Date</div>
+    <input type="date" id="pay-date" value="${month+'-01'}"/>
+    <div class="fl">Hours worked</div>
+    <input type="number" id="pay-hrs" placeholder="e.g. 40" step="0.5" min="0"/>
+    <div class="fl">Amount paid</div>
+    <div class="dollar-row"><span>$</span><input type="number" id="pay-amt" placeholder="0.00" step="0.01" min="0" value="${amt}"/></div>
+    <div class="fl">Note (optional)</div>
+    <input type="text" id="pay-note" placeholder="e.g. Mowing route, trim work"/>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" onclick="savePayment('${eid}')">Save Payment</button>
+    </div>
+  `);
+}
+
+function savePaymentSimple(eid){
+  const e = EMPLOYEES.find(x=>x.id===eid);
+  if(!e) return;
+  const amt = parseFloat(document.getElementById('pay-amt')?.value)||0;
+  if(!amt){ alert('Enter amount paid'); return; }
+  const month = document.getElementById('pay-month')?.value||TODAY.slice(0,7);
+  const date = month+'-01';
+  if(!e.payments) e.payments=[];
+  e.payments.push({id:uid(), date, hours:0, amount:amt, note:''});
+  save();
+  closeSheet();
+  openEmployeeDetail(eid);
+  showToast('Payment logged');
+}
+
+function savePayment(eid){
+  const e = EMPLOYEES.find(x=>x.id===eid);
+  if(!e) return;
+  const amt = parseFloat(document.getElementById('pay-amt')?.value)||0;
+  if(!amt){ alert('Enter amount paid'); return; }
+  const date = document.getElementById('pay-date')?.value||TODAY;
+  const hrs  = parseFloat(document.getElementById('pay-hrs')?.value)||0;
+  const note = (document.getElementById('pay-note')?.value||'').trim();
+  if(!e.payments) e.payments=[];
+  e.payments.push({id:uid(), date, hours:hrs, amount:amt, note});
+  save();
+  closeSheet();
+  openEmployeeDetail(eid);
+}
+
+function openEditEmployee(eid){
+  const e = EMPLOYEES.find(x=>x.id===eid);
+  if(!e) return;
+  showSheet(`
+    <div class="sheet-title">Edit Employee</div>
+    <div class="fl" style="margin-top:0">Name</div>
+    <input type="text" id="emp-name-inp" value="${e.name}"/>
+    <div class="fl">Hourly rate</div>
+    <div class="dollar-row"><span>$</span><input type="number" id="emp-rate-inp" value="${e.rate}" step="0.50" min="0"/></div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeSheet()">Cancel</button>
+      <button class="btn-save" onclick="saveEditEmployee('${eid}')">Save</button>
+    </div>
+  `);
+}
+
+function saveEditEmployee(eid){
+  const e = EMPLOYEES.find(x=>x.id===eid);
+  if(!e) return;
+  const name = (document.getElementById('emp-name-inp')?.value||'').trim();
+  const rate = parseFloat(document.getElementById('emp-rate-inp')?.value)||0;
+  if(!name){ alert('Enter name'); return; }
+  e.name=name; e.rate=rate;
+  save();
+  closeAllSheets();
+  openEmployeeDetail(eid);
+}
+
+function deleteEmployee(eid){
+  if(!confirm('Remove this employee? Their payment history will be deleted.')) return;
+  EMPLOYEES = EMPLOYEES.filter(x=>x.id!==eid);
+  save();
+  closeAllSheets();
+  openHrsTile();
 }
 
 function openRevTile(){
