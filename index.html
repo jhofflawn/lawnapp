@@ -801,35 +801,57 @@ function doSkip(jid,k){
 // ─── DAY DONE ─────────────────────────────────────────────────────
 function showDayDone(k){
   const rev=tRev(k),exp=tExp(k),hrs=HW[k]||0,net=rev-exp-(hrs*laborRate),cnt=gS(k).filter(j=>!j.skipped).length;
+
+  // Employee checkboxes — all checked by default
+  const empChecks = EMPLOYEES.length ? `
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Crew worked today</div>
+      ${EMPLOYEES.map(e=>`
+        <label style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:0.5px solid var(--border);cursor:pointer;font-size:14px">
+          <input type="checkbox" class="emp-day-chk" data-eid="${e.id}" data-ename="${e.name}" data-erate="${e.rate}" checked style="width:18px;height:18px"/>
+          <span style="flex:1">${e.name}</span>
+          <span style="font-size:12px;color:var(--text3)">$${e.rate}/hr</span>
+        </label>`).join('')}
+    </div>` : '';
+
   const el=document.createElement('div');
   el.className='centered-overlay';
   el.innerHTML=`<div class="centered-card">
     <div style="font-size:46px;margin-bottom:10px">🎉</div>
     <div style="font-size:20px;font-weight:700;margin-bottom:4px">Day Complete!</div>
     <div style="font-size:14px;color:var(--text2);margin-bottom:16px;line-height:1.7">All ${cnt} jobs done<br>Revenue: <b>$${rev.toFixed(2)}</b> · Expenses: <b>$${exp.toFixed(2)}</b><br>Net: <b style="color:${net>=0?'var(--green)':'var(--red)'}">$${net.toFixed(2)}</b></div>
-    <div style="margin-bottom:12px">
-      <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Billable hours <span style="font-weight:400;color:var(--text3)">(counts toward labor cost)</span></div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Hours worked</div>
       <div style="display:flex;align-items:center;gap:10px">
         <input type="number" id="hrs-inp" placeholder="e.g. 6.5" step="0.5" min="0" value="${HW[k]||''}" style="flex:1"/>
         <span style="font-size:13px;color:var(--text3);white-space:nowrap">hrs @ $${laborRate}/hr</span>
       </div>
     </div>
-    <div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Non-billable hours <span style="font-weight:400;color:var(--text3)">(tracked only, no labor cost)</span></div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <input type="number" id="hrs-nb-inp" placeholder="e.g. 1.0" step="0.5" min="0" value="${HW_NB[k]||''}" style="flex:1"/>
-        <span style="font-size:13px;color:var(--text3);white-space:nowrap">hrs</span>
-      </div>
-    </div>
+    ${empChecks}
     <button class="btn-save" onclick="saveDayDone('${k}',this)">Save & Close</button>
   </div>`;
   document.getElementById('modal-root').appendChild(el);
 }
 function saveDayDone(k,btn){
   const h=parseFloat(document.getElementById('hrs-inp').value)||0;
-  const hNB=parseFloat(document.getElementById('hrs-nb-inp').value)||0;
   if(h>0){HW[k]=h;}else{delete HW[k];}
-  if(hNB>0){HW_NB[k]=hNB;}else{delete HW_NB[k];}
+  // Log hours for each checked employee
+  if(h>0){
+    document.querySelectorAll('.emp-day-chk:checked').forEach(chk=>{
+      const eid = chk.dataset.eid;
+      const ename = chk.dataset.ename;
+      const erate = parseFloat(chk.dataset.erate)||0;
+      const emp = EMPLOYEES.find(x=>x.id===eid);
+      if(emp){
+        if(!emp.payments) emp.payments=[];
+        // Check if already logged for this date to avoid duplicates
+        const already = emp.payments.find(p=>p.date===k&&p.note==='Auto: day complete');
+        if(!already){
+          emp.payments.push({id:uid(), date:k, hours:h, amount:erate*h, note:'Auto: day complete'});
+        }
+      }
+    });
+  }
   save();
   btn.closest('.centered-overlay').remove();
   renderHistory();
@@ -2144,6 +2166,16 @@ function openHrsTile(){
     </div>
     <div class="info-box">
       <div class="info-row"><span style="color:var(--text2)">Billable hours</span><b style="color:var(--blue)">${s.hrs.toFixed(1)} hrs</b></div>
+      ${(()=>{
+        // Show each employee's hours for the month
+        const d=new Date();d.setMonth(d.getMonth()+histMO);
+        const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0');
+        const prefix=y+'-'+m;
+        return EMPLOYEES.map(e=>{
+          const empHrs=(e.payments||[]).filter(p=>p.date&&p.date.startsWith(prefix)).reduce((s,p)=>s+(+p.hours||0),0);
+          return empHrs>0?`<div class="info-row" style="padding-left:14px;border-left:2px solid var(--blue);margin-left:8px"><span style="color:var(--text3)">↳ ${e.name}</span><b style="color:var(--blue)">${empHrs.toFixed(1)} hrs</b></div>`:'';
+        }).join('');
+      })()}
       <div class="info-row"><span style="color:var(--text2)">Non-billable hours</span><b style="color:var(--text3)">${totalNBMonth.toFixed(1)} hrs</b></div>
       <div class="info-row"><span style="color:var(--text2)">Total hours</span><b>${(s.hrs+totalNBMonth).toFixed(1)} hrs</b></div>
       <div class="info-row"><span style="color:var(--text2)">Labor cost</span><b style="color:var(--red)">$${s.labor.toFixed(2)}</b></div>
