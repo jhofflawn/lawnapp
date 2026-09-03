@@ -3896,7 +3896,9 @@ function saveEstimateTotalOnly(eid){
   openEstimateDetail(eid);
 }
 
-function openEstimateEditForm(est){
+function openEstimateEditForm(estOrId){
+  const est = typeof estOrId==='string' ? ESTIMATES.find(x=>x.id===estOrId) : estOrId;
+  if(!est) return;
   // Edit info (client, date, scope) — reached from detail view edit button
   showSheet(`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -4093,7 +4095,7 @@ function openEstimateDetail(eid){
         <div style="font-size:12px;color:var(--text3)">${est.number}</div>
       </div>
       <div style="display:flex;gap:6px">
-        <button onclick="openEstimateEditForm(est)" style="background:none;border:0.5px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer">✏️ Edit</button>
+        <button onclick="openEstimateEditForm('${eid}')" style="background:none;border:0.5px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer">✏️ Edit</button>
         <button onclick="viewEstimatePrint('${eid}')" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer">📋 View</button>
       </div>
     </div>
